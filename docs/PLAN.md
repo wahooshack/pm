@@ -87,11 +87,11 @@ Tests and success criteria
 Goal: expose API routes that allow reading and writing the Kanban board for a given user, using SQLite and auto-creating the database if needed.
 
 Checklist
-- [ ] Create the SQLite database layer and schema initialization logic.
-- [ ] Add routes to fetch the user’s board state.
-- [ ] Add routes to update columns and card data for a given user.
-- [ ] Ensure the database is created automatically when absent.
-- [ ] Validate the API with backend unit and integration tests.
+- [x] Create the SQLite database layer and schema initialization logic.
+- [x] Add routes to fetch the user’s board state.
+- [x] Add routes to update columns and card data for a given user.
+- [x] Ensure the database is created automatically when absent.
+- [x] Validate the API with backend unit and integration tests.
 
 Tests and success criteria
 - Database initializes with no manual setup.
