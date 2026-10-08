@@ -1,13 +1,59 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import Home from "@/app/page";
 
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
+const defaultBoard = {
+  columns: [
+    { id: "col-backlog", title: "Backlog", cardIds: ["card-1", "card-2"] },
+    { id: "col-discovery", title: "Discovery", cardIds: ["card-3"] },
+    { id: "col-progress", title: "In Progress", cardIds: ["card-4", "card-5"] },
+    { id: "col-review", title: "Review", cardIds: ["card-6"] },
+    { id: "col-done", title: "Done", cardIds: ["card-7", "card-8"] },
+  ],
+  cards: {
+    "card-1": { id: "card-1", title: "Align roadmap themes", details: "Draft quarterly themes with impact statements and metrics." },
+    "card-2": { id: "card-2", title: "Gather customer signals", details: "Review support tags, sales notes, and churn feedback." },
+    "card-3": { id: "card-3", title: "Prototype analytics view", details: "Sketch initial dashboard layout and key drill-downs." },
+    "card-4": { id: "card-4", title: "Refine status language", details: "Standardize column labels and tone across the board." },
+    "card-5": { id: "card-5", title: "Design card layout", details: "Add hierarchy and spacing for scanning dense lists." },
+    "card-6": { id: "card-6", title: "QA micro-interactions", details: "Verify hover, focus, and loading states." },
+    "card-7": { id: "card-7", title: "Ship marketing page", details: "Final copy approved and asset pack delivered." },
+    "card-8": { id: "card-8", title: "Close onboarding sprint", details: "Document release notes and share internally." },
+  },
+};
+
 describe("KanbanBoard", () => {
-  it("renders five columns", () => {
+  let boardState: typeof defaultBoard;
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    boardState = JSON.parse(JSON.stringify(defaultBoard));
+    global.fetch = vi.fn(async (_input, init) => {
+      if (init?.method === "POST") {
+        const payload = JSON.parse(String(init.body));
+        boardState = payload.board;
+        return {
+          ok: true,
+          json: async () => payload.board,
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => boardState,
+      } as Response;
+    }) as typeof fetch;
+  });
+
+  it("renders five columns", async () => {
     render(<KanbanBoard />);
-    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+    });
   });
 
   it("renames a column", async () => {
@@ -42,5 +88,37 @@ describe("KanbanBoard", () => {
     await userEvent.click(deleteButton);
 
     expect(within(column).queryByText("New card")).not.toBeInTheDocument();
+  });
+
+  it("requires a valid login before showing the board", async () => {
+    render(<Home />);
+
+    expect(screen.getByRole("heading", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /kanban studio/i })).not.toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText("Username"));
+    await userEvent.type(screen.getByLabelText("Username"), "user");
+    await userEvent.clear(screen.getByLabelText("Password"));
+    await userEvent.type(screen.getByLabelText("Password"), "password");
+    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /kanban studio/i })).toBeInTheDocument();
+    });
+  });
+
+  it("logs out and returns to the login screen", async () => {
+    window.sessionStorage.setItem("kanban-demo-auth", "authenticated");
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /kanban studio/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /log out/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /sign in/i })).toBeInTheDocument();
+    });
   });
 });
