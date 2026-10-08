@@ -11,15 +11,37 @@ describe("moveCard", () => {
     expect(result[0].cardIds).toEqual(["card-2", "card-1"]);
   });
 
-  it("moves cards to another column", () => {
+  it("moves a card to the end of a target column when dropped on its last card", () => {
     const result = moveCard(baseColumns, "card-2", "card-3");
     expect(result[0].cardIds).toEqual(["card-1"]);
-    expect(result[1].cardIds).toEqual(["card-2", "card-3"]);
+    expect(result[1].cardIds).toEqual(["card-3", "card-2"]);
   });
 
   it("drops cards to the end of a column", () => {
     const result = moveCard(baseColumns, "card-1", "col-b");
     expect(result[0].cardIds).toEqual(["card-2"]);
     expect(result[1].cardIds).toEqual(["card-3", "card-1"]);
+  });
+
+  it("moves a card into an empty column", () => {
+    const emptyColumns: Column[] = [
+      { id: "col-a", title: "A", cardIds: ["card-1"] },
+      { id: "col-b", title: "B", cardIds: [] },
+    ];
+
+    const result = moveCard(emptyColumns, "card-1", "col-b");
+    expect(result[0].cardIds).toEqual([]);
+    expect(result[1].cardIds).toEqual(["card-1"]);
+  });
+
+  it("moves a card into an empty column when the empty-zone droppable id is used", () => {
+    const emptyColumns: Column[] = [
+      { id: "col-a", title: "A", cardIds: ["card-1"] },
+      { id: "col-b", title: "B", cardIds: [] },
+    ];
+
+    const result = moveCard(emptyColumns, "card-1", "col-b-empty-zone");
+    expect(result[0].cardIds).toEqual([]);
+    expect(result[1].cardIds).toEqual(["card-1"]);
   });
 });

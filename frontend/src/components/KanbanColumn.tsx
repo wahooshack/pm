@@ -20,7 +20,8 @@ export const KanbanColumn = ({
   onAddCard,
   onDeleteCard,
 }: KanbanColumnProps) => {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const droppableId = cards.length === 0 ? `${column.id}-empty-zone` : column.id;
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId });
 
   return (
     <section
@@ -58,7 +59,10 @@ export const KanbanColumn = ({
           ))}
         </SortableContext>
         {cards.length === 0 && (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--stroke)] px-3 py-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+          <div
+            data-empty-column-zone={column.id}
+            className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--stroke)] px-3 py-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]"
+          >
             Drop a card here
           </div>
         )}

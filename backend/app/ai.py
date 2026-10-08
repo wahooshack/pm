@@ -226,7 +226,7 @@ def parse_structured_ai_response(raw_text: str) -> dict[str, Any]:
         return {"message": "I processed your request.", "actions": []}
 
     if text.startswith("```"):
-        fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
+        fenced = re.search(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL)
         if fenced:
             text = fenced.group(1)
 

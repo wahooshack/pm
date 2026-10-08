@@ -90,6 +90,106 @@ describe("KanbanBoard", () => {
     expect(within(column).queryByText("New card")).not.toBeInTheDocument();
   });
 
+  it("sends board context to the assistant and saves its valid board update", async () => {
+    const nextBoard = JSON.parse(JSON.stringify(defaultBoard)) as typeof defaultBoard;
+    nextBoard.columns[0].cardIds = ["card-2"];
+    nextBoard.columns[1].cardIds = ["card-3", "card-1"];
+    let aiRequest: Record<string, unknown> | undefined;
+    global.fetch = vi.fn(async (input, init) => {
+      if (String(input) === "/api/ai") {
+        aiRequest = JSON.parse(String(init?.body));
+        return {
+          ok: true,
+          json: async () => ({
+            response: "Moved Align roadmap themes to Discovery.",
+            model: "mock-model",
+            board: nextBoard,
+            actions: [
+              {
+                type: "move_card",
+                cardId: "card-1",
+                columnId: "col-discovery",
+              },
+            ],
+          }),
+        } as Response;
+      }
+
+      if (init?.method === "POST") {
+        const payload = JSON.parse(String(init.body));
+        boardState = payload.board;
+        return {
+          ok: true,
+          json: async () => payload.board,
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => boardState,
+      } as Response;
+    }) as typeof fetch;
+
+    render(<KanbanBoard />);
+    const input = screen.getByPlaceholderText("Ask the board assistant...");
+    await userEvent.type(input, "Move Align roadmap themes to Discovery");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Moved Align roadmap themes to Discovery.")).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId("column-col-discovery")).getByTestId("card-card-1")
+      ).toBeInTheDocument();
+    });
+
+    expect(aiRequest).toMatchObject({
+      prompt: "Move Align roadmap themes to Discovery",
+      board: defaultBoard,
+    });
+    expect(aiRequest?.conversation).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: "Move Align roadmap themes to Discovery",
+        }),
+      ])
+    );
+    expect(boardState.columns[0].cardIds).toEqual(["card-2"]);
+    expect(boardState.columns[1].cardIds).toEqual(["card-3", "card-1"]);
+  });
+
+  it("shows no-op assistant responses without saving an unchanged board", async () => {
+    const fetchMock = vi.fn(async (input) => {
+      if (String(input) === "/api/ai") {
+        return {
+          ok: true,
+          json: async () => ({
+            response: "No changes are needed.",
+            model: "mock-model",
+            board: JSON.parse(JSON.stringify(boardState)),
+            actions: [],
+          }),
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => boardState,
+      } as Response;
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    render(<KanbanBoard />);
+    await userEvent.type(
+      screen.getByPlaceholderText("Ask the board assistant..."),
+      "Is anything urgent?"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("No changes are needed.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+
   it("requires a valid login before showing the board", async () => {
     render(<Home />);
 

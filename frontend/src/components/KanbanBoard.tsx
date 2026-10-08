@@ -8,6 +8,8 @@ import {
   useSensor,
   useSensors,
   closestCorners,
+  pointerWithin,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -25,6 +27,11 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+};
+
+const pointerWithinOrClosestCorners: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : closestCorners(args);
 };
 
 const saveBoardToBackend = async (board: BoardData) => {
@@ -228,7 +235,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
 
       setConversation((current) => [...current, assistantMessage]);
 
-      if (payload.board) {
+      if (payload.board && JSON.stringify(payload.board) !== JSON.stringify(board)) {
         const savedBoard = await saveBoardToBackend(payload.board);
         setBoard(savedBoard);
         setError(null);
@@ -316,7 +323,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={pointerWithinOrClosestCorners}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
@@ -351,7 +358,12 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
               </h2>
             </div>
 
-            <div className="flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1">
+            <div
+              role="log"
+              aria-label="Assistant conversation"
+              aria-live="polite"
+              className="flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1"
+            >
               {conversation.map((message) => (
                 <div
                   key={message.id}

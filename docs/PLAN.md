@@ -121,14 +121,14 @@ Tests and success criteria
 Goal: enable backend access to OpenRouter and verify networking, authentication, and model call functionality using a simple prompt.
 
 Checklist
-- [ ] Configure the backend environment to use the OpenRouter API key.
-- [ ] Add a minimal AI connectivity endpoint or service wrapper.
-- [ ] Validate a simple `2 + 2` or equivalent prompt returns a supported response.
-- [ ] Confirm the chosen model and API configuration are working.
+- [x] Configure the backend environment to use the OpenRouter API key.
+- [x] Add a minimal AI connectivity endpoint or service wrapper.
+- [x] Validate a simple `2 + 2` or equivalent prompt returns a supported response.
+- [x] Confirm the chosen model and API configuration are working.
 
 Tests and success criteria
-- The backend can call OpenRouter successfully.
-- The response is returned in a format the app can handle.
+- The backend can call OpenRouter successfully. (Verified against the live service.)
+- The response is returned in a format the app can handle. (Verified through the API and service tests.)
 - The AI service is proven working before integration into the Kanban workflow.
 
 ## Part 9: AI structured board-aware assistant
@@ -136,33 +136,33 @@ Tests and success criteria
 Goal: integrate AI into the Kanban workflow by sending board JSON, the user request, and conversation context, and requiring structured output that can include both a text response and board edits.
 
 Checklist
-- [ ] Build the prompt payload with the current board state and user message.
-- [ ] Include conversation history in the AI request.
-- [ ] Require structured output fields for text response and optional board update actions.
-- [ ] Parse AI results and apply valid board updates safely.
-- [ ] Add tests covering valid updates, invalid payloads, and no-op responses.
+- [x] Build the prompt payload with the current board state and user message.
+- [x] Include conversation history in the AI request.
+- [x] Require structured output fields for text response and optional board update actions.
+- [x] Parse AI results and apply valid board updates safely.
+- [x] Add tests covering valid updates, invalid payloads, and no-op responses.
 
 Tests and success criteria
-- AI responses include both a user-facing message and optional board modifications.
-- Invalid or partial AI outputs do not corrupt board state.
-- Structured outputs are validated before board changes are applied.
+- AI responses include both a user-facing message and optional board modifications. (Verified by backend and frontend tests.)
+- Invalid or partial AI outputs do not corrupt board state. (Verified by malformed, invalid-action, and no-op tests.)
+- Structured outputs are validated before board changes are applied. (Supported action types and action fields are sanitized before application.)
 
 ## Part 10: AI chat sidebar and automatic refresh
 
 Goal: deliver the full MVP user experience with a chat sidebar, AI-driven updates, and automatic refresh of the board when the assistant changes tasks.
 
 Checklist
-- [ ] Add a sidebar AI chat widget to the authenticated frontend.
-- [ ] Send user prompts to the backend AI route.
-- [ ] Render the AI response in chat history.
-- [ ] Apply structured board change instructions from the AI when valid.
-- [ ] Refresh the frontend board automatically after AI-driven card edits or moves.
-- [ ] Run the full UI and backend validation suite.
+- [x] Add a sidebar AI chat widget to the authenticated frontend.
+- [x] Send user prompts to the backend AI route.
+- [x] Render the AI response in chat history.
+- [x] Apply structured board change instructions from the AI when valid.
+- [x] Refresh the frontend board automatically after AI-driven card edits or moves.
+- [x] Run the full UI and backend validation suite.
 
 Tests and success criteria
-- The user can request board operations through the chat interface.
-- AI changes are reflected in the current Kanban state without a manual page reload.
-- The experience works end-to-end with authentication, persistence, and AI integration.
+- The user can request board operations through the chat interface. (Verified by the browser assistant test and live structured AI API smoke test.)
+- AI changes are reflected in the current Kanban state without a manual page reload. (Verified by the browser assistant board-update test.)
+- The experience works end-to-end with authentication, persistence, and AI integration. (12 frontend unit tests, 5 Playwright tests, and 9 backend tests pass; build and lint pass.)
 
 ## Release gate
 
