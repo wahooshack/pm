@@ -5,8 +5,12 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.ai import call_openrouter, generate_board_ai_response
-from app.database import init_db, load_board_for_user, save_board_for_user
+try:
+    from backend.app.ai import call_openrouter, generate_board_ai_response
+    from backend.app.database import init_db, load_board_for_user, save_board_for_user
+except ModuleNotFoundError:  # pragma: no cover - fallback for direct backend execution
+    from app.ai import call_openrouter, generate_board_ai_response
+    from app.database import init_db, load_board_for_user, save_board_for_user
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = PROJECT_ROOT / "backend"
