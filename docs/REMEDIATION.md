@@ -1,6 +1,6 @@
 # Review remediation
 
-The user authorized all recommended changes from `review.md` on October 8, 2026. The original report remains a historical record of revision `be8f713`.
+The user authorized all recommended changes from `review.md` on October 8, 2026. The original report remains a historical record of revision `074dcd0`.
 
 ## Implemented
 

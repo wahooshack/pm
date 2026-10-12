@@ -1,6 +1,6 @@
 # Project code review
 
-Reviewed on October 8, 2026. Project: `D:\projects\pm`. Revision: `be8f713`.
+Reviewed on October 8, 2026. Project: `D:\projects\pm`. Revision: `074dcd0`.
 
 > Remediation was authorized on October 8, 2026. This report describes the original revision; see [docs/REMEDIATION.md](docs/REMEDIATION.md) for implemented changes and current validation.
 
