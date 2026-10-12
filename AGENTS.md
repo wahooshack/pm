@@ -28,9 +28,9 @@ For the MVP, this will run locally (in a docker container)
 - Use SQLLite local database for the database, creating a new db if it doesn't exist
 - Start and Stop server scripts for Mac, PC, Linux in scripts/
 
-## Starting Point
+## Current implementation
 
-A working MVP of the frontend has been built and is already in frontend. This is not yet designed for the Docker setup. It's a pure frontend-only demo.
+FastAPI serves the Next.js static export and protected JSON API. The demo account uses backend-managed expiring sessions. SQLite stores board-scoped IDs and revision-checked writes; startup migrates existing databases without discarding data. Manual editing, pointer/keyboard movement, and server-committed AI updates are implemented. Docker mounts only runtime data and publishes on loopback. See docs/REMEDIATION.md for current validation and limitations.
 
 ## Color Scheme
 

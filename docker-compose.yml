@@ -3,10 +3,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: pm-mvp-app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
+    environment:
+      PM_DB_PATH: /app/backend/data/pm.db
     volumes:
-      - .:/app
+      - ./backend/data:/app/backend/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

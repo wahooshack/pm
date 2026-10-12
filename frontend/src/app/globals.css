@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  --font-body: "Segoe UI", Arial, sans-serif;
+  --font-display: "Segoe UI", Arial, sans-serif;
   --accent-yellow: #ecad0a;
   --primary-blue: #209dd7;
   --secondary-purple: #753991;
@@ -32,3 +34,8 @@ body {
 .font-display {
   font-family: var(--font-display), "Segoe UI", sans-serif;
 }
+
+/* Preserve the palette while using a readable text shade on light surfaces. */
+.text-\[var\(--gray-text\)\] { color: #656565; }
+:focus-visible { outline: 2px solid var(--secondary-purple); outline-offset: 3px; }
+button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity: 0.65; }

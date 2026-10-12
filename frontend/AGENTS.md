@@ -1,50 +1,15 @@
-# Frontend agent guide
+# Frontend guide
 
-This directory contains the web frontend for the project management MVP.
+Next.js/React/TypeScript with dnd-kit. Production uses static export served by FastAPI. See the root README for startup; Next development alone has no backend API.
 
-## Current state
+- `src/app/page.tsx`: restores the backend session, authenticates login, revokes logout.
+- `src/lib/api.ts`: same-origin JSON API calls and controlled errors.
+- `src/lib/kanban.ts`: board types (including revision), seed fixture, movement helpers.
+- `src/components/KanbanBoard.tsx`: authoritative loading, one in-flight mutation, explicit retry/reload, server-committed AI results.
+- `KanbanColumn.tsx`: fixed columns; rename on blur/Enter, Escape to cancel.
+- `KanbanCard.tsx`: card editor, drag handle, keyboard-accessible movement and removal.
+- `tests/`: real exported-frontend/FastAPI/SQLite integration, with only the provider mocked.
 
-The app is a working client-side Kanban demo built with Next.js, React, TypeScript, and the dnd-kit drag-and-drop library. The project is not yet integrated with the FastAPI backend or Docker environment; it currently runs as a standalone frontend experience.
+Never treat browser storage as authorization. Do not render writable seed data during loading/failure, send stale full-board snapshots without revisions, or POST an AI replacement from the client. Abort pending requests on unmount. Preserve the palette, readable text, explicit control labels, and keyboard operation.
 
-## App structure
-
-- `src/app/page.tsx`: main page entry; renders the Kanban board.
-- `src/components/KanbanBoard.tsx`: top-level board UI, state management, drag start/end handlers, add/delete card logic.
-- `src/components/KanbanColumn.tsx`: renders each column, handles drop zones, card lists, and add-card form.
-- `src/components/KanbanCard.tsx`: draggable card item with delete button.
-- `src/components/KanbanCardPreview.tsx`: overlay for drag preview while dragging a card.
-- `src/components/NewCardForm.tsx`: form used to add a card to a column.
-- `src/lib/kanban.ts`: board model, seed data, card movement logic, helper functions such as `moveCard` and `createId`.
-- `tests/`: UI and logic tests for the Kanban behavior.
-
-## Key behavior already implemented
-
-- Five fixed Kanban columns with editable titles.
-- Cards can be moved between columns using drag and drop.
-- Cards can be added and removed.
-- Board state is stored in local React state.
-- Drag preview is shown while dragging.
-- Styling uses a custom palette defined in the root project AGENTS.md.
-
-## Tests and validation
-
-Use the package scripts defined in `package.json`:
-
-- `npm run test` or `npm run test:unit`: run unit tests
-- `npm run test:e2e`: run Playwright end-to-end tests
-- `npm run build`: verify the production build
-- `npm run lint`: run ESLint checks
-
-## Working conventions
-
-- Keep the app simple and consistent with the project requirements.
-- Prefer small, direct changes over broad rewrites.
-- Preserve the existing CSS and color-system conventions.
-- Do not add backend dependencies or new architecture patterns unless a later plan step requires them.
-- When adding functionality for the backend integration phase, keep the frontend behavior consistent with the persistent API model.
-
-## Important notes
-
-- The current board is purely client-side; no authentication or API persistence is yet implemented.
-- The root project plan expects the frontend to later be served by the FastAPI backend, with login gating and integration to a SQLite-backed Kanban model.
-- The existing UI should be treated as the base experience to preserve while adding persistence, login flow, AI chat, and Docker packaging.
+Checks: `npm run lint`, `npm run test:unit`, `npm run test:e2e` (includes production build). E2E needs root `.venv` with development requirements; it owns port 8765 and must not reuse an unrelated server. Runtime/build/report files are ignored.

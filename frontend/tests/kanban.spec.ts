@@ -1,182 +1,134 @@
 import { expect, test, type Page } from "@playwright/test";
+import { initialData } from "../src/lib/kanban";
 
 const signIn = async (page: Page) => {
   await page.goto("/");
-  await page.getByLabel("Username").fill("user");
-  await page.getByLabel("Password").fill("password");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByLabel("Username", { exact: true }).fill("user");
+  await page.getByLabel("Password", { exact: true }).fill("password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
 };
+const waitSaved = async (page: Page) => {
+  await expect(page.getByLabel("Move Align roadmap themes to column")).toBeEnabled();
+  await expect(page.getByText("Saving board...")).toHaveCount(0);
+};
 
-test("loads the kanban board", async ({ page }) => {
-  await signIn(page);
-  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+test.beforeEach(async ({ page }) => {
+  expect((await page.request.post("/api/login", { data: { username: "user", password: "password" } })).ok()).toBeTruthy();
+  const current = await (await page.request.get("/api/board")).json();
+  expect((await page.request.post("/api/board", { data: { board: { ...initialData, revision: current.revision } } })).ok()).toBeTruthy();
+  await page.request.post("/api/logout", { data: {} });
 });
 
-test("adds a card to a column", async ({ page }) => {
-  await signIn(page);
-  const firstColumn = page.locator('[data-testid^="column-"]').first();
-  await firstColumn.getByRole("button", { name: /add a card/i }).click();
-  await firstColumn.getByPlaceholder("Card title").fill("Playwright card");
-  await firstColumn.getByPlaceholder("Details").fill("Added via e2e.");
-  await firstColumn.getByRole("button", { name: /add card/i }).click();
-  await expect(firstColumn.getByText("Playwright card")).toBeVisible();
+test("server enforces login and revokes logout", async ({ page }) => {
+  expect((await page.request.get("/api/board")).status()).toBe(401);
+  await page.goto("/");
+  await page.evaluate(() => sessionStorage.setItem("kanban-demo-auth", "authenticated"));
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await page.getByLabel("Password", { exact: true }).fill("wrong");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByText("Incorrect username or password.")).toBeVisible();
+  await page.getByLabel("Password", { exact: true }).fill("password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  expect((await page.request.get("/api/board")).status()).toBe(401);
 });
 
-test("moves a card between columns", async ({ page }) => {
+test("renames once and persists across reload", async ({ page }) => {
   await signIn(page);
-  const card = page.getByTestId("card-card-1");
-  const targetColumn = page.getByTestId("column-col-review");
-  const cardBox = await card.boundingBox();
-  const columnBox = await targetColumn.boundingBox();
-  if (!cardBox || !columnBox) {
-    throw new Error("Unable to resolve drag coordinates.");
-  }
-
-  await page.mouse.move(
-    cardBox.x + cardBox.width / 2,
-    cardBox.y + cardBox.height / 2
-  );
-  await page.mouse.down();
-  await page.mouse.move(
-    columnBox.x + columnBox.width / 2,
-    columnBox.y + 120,
-    { steps: 12 }
-  );
-  await page.mouse.up();
-  await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+  const input = page.getByLabel("Column title: Backlog", { exact: true });
+  const saving = page.waitForResponse(r => r.url().endsWith("/api/board") && r.request().method() === "POST");
+  await input.fill("Sprint Ready"); await input.press("Enter");
+  expect((await saving).ok()).toBeTruthy(); await waitSaved(page);
+  await page.reload();
+  await expect(page.getByLabel("Column title: Sprint Ready", { exact: true })).toHaveValue("Sprint Ready");
 });
 
-test("moves a card into an empty column", async ({ page }) => {
-  const board = {
-    columns: [
-      { id: "col-backlog", title: "Backlog", cardIds: ["card-1"] },
-      { id: "col-discovery", title: "Discovery", cardIds: [] },
-      { id: "col-progress", title: "In Progress", cardIds: [] },
-      { id: "col-review", title: "Review", cardIds: [] },
-      { id: "col-done", title: "Done", cardIds: [] },
-    ],
-    cards: {
-      "card-1": {
-        id: "card-1",
-        title: "Align roadmap themes",
-        details: "Draft quarterly themes with impact statements and metrics.",
-      },
-    },
-  };
-
-  await page.route("**/api/board*", async (route) => {
-    const responseBoard =
-      route.request().method() === "GET"
-        ? board
-        : JSON.parse(route.request().postData() ?? "{}").board;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(responseBoard),
-    });
-  });
-
+test("adds, edits, cancels, clears details, and deletes with SQLite persistence", async ({ page }) => {
   await signIn(page);
-  const card = page.getByTestId("card-card-1");
-  const targetColumn = page.getByTestId("column-col-discovery");
-  const emptyZone = targetColumn.locator("[data-empty-column-zone]");
-  await emptyZone.scrollIntoViewIfNeeded();
-  const cardBox = await card.boundingBox();
-  const targetBox = await emptyZone.boundingBox();
-  if (!cardBox || !targetBox) {
-    throw new Error("Unable to resolve empty-column drag coordinates.");
-  }
-
-  await page.mouse.move(
-    cardBox.x + cardBox.width / 2,
-    cardBox.y + cardBox.height / 2
-  );
-  await page.mouse.down();
-  await page.mouse.move(
-    targetBox.x + targetBox.width / 2,
-    targetBox.y + targetBox.height / 2,
-    { steps: 12 }
-  );
-  await page.mouse.up();
-
-  await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
-  await expect(page.getByTestId("column-col-backlog").getByTestId("card-card-1")).toHaveCount(0);
+  const column = page.getByTestId("column-col-backlog");
+  await column.getByRole("button", { name: "Add a card" }).click();
+  await column.getByLabel("New card title").fill("Browser card");
+  await column.getByLabel("New card details").fill("Original notes");
+  await column.getByRole("button", { name: "Add card" }).click(); await waitSaved(page);
+  await page.reload();
+  await expect(page.getByText("Browser card", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit Browser card" }).click();
+  await page.getByLabel("Card title", { exact: true }).fill("Cancelled name");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByText("Browser card", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit Browser card" }).click();
+  await page.getByLabel("Card title", { exact: true }).fill("Edited browser card");
+  await page.getByRole("textbox", { name: "Card details", exact: true }).fill("");
+  await page.getByRole("button", { name: "Save card" }).click(); await waitSaved(page);
+  await page.reload();
+  await expect(page.getByText("Edited browser card", { exact: true })).toBeVisible();
+  const board = await (await page.request.get("/api/board")).json();
+  expect(Object.values(board.cards).find((c) => (c as {title: string}).title === "Edited browser card")).toMatchObject({ details: "" });
+  await page.getByRole("button", { name: "Delete Edited browser card" }).click(); await waitSaved(page);
+  await page.reload(); await expect(page.getByText("Edited browser card", { exact: true })).toHaveCount(0);
 });
 
-test("applies and persists a structured assistant board update", async ({ page }) => {
-  let board = {
-    columns: [
-      { id: "col-backlog", title: "Backlog", cardIds: ["card-1"] },
-      { id: "col-discovery", title: "Discovery", cardIds: [] },
-      { id: "col-progress", title: "In Progress", cardIds: [] },
-      { id: "col-review", title: "Review", cardIds: [] },
-      { id: "col-done", title: "Done", cardIds: [] },
-    ],
-    cards: {
-      "card-1": {
-        id: "card-1",
-        title: "Align roadmap themes",
-        details: "Draft quarterly themes.",
-      },
-    },
-  };
-  let submittedPrompt: Record<string, unknown> | undefined;
-  let persistedBoard = board;
-
-  await page.route("**/api/board*", async (route) => {
-    if (route.request().method() === "POST") {
-      const payload = JSON.parse(route.request().postData() ?? "{}");
-      board = payload.board;
-      persistedBoard = payload.board;
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(board),
-    });
-  });
-  await page.route("**/api/ai", async (route) => {
-    submittedPrompt = JSON.parse(route.request().postData() ?? "{}");
-    const nextBoard = JSON.parse(JSON.stringify(board));
-    nextBoard.columns[0].cardIds = [];
-    nextBoard.columns[1].cardIds = ["card-1"];
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        response: "Moved Align roadmap themes to Discovery.",
-        model: "mock-model",
-        board: nextBoard,
-        actions: [
-          {
-            type: "move_card",
-            cardId: "card-1",
-            columnId: "col-discovery",
-          },
-        ],
-      }),
-    });
-  });
-
+test("moves a card with pointer drag and persists it", async ({ page }) => {
   await signIn(page);
-  const prompt = "Move Align roadmap themes to Discovery";
-  await page.getByPlaceholder("Ask the board assistant...").fill(prompt);
-  await page.getByRole("button", { name: "Send" }).click();
+  const handle = page.getByRole("button", { name: "Drag Align roadmap themes", exact: true });
+  const target = page.getByTestId("column-col-review");
+  const from = await handle.boundingBox(); const to = await target.boundingBox();
+  if (!from || !to) throw new Error("Missing drag coordinates");
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down(); await page.mouse.move(to.x + to.width / 2, to.y + 80, { steps: 15 }); await page.mouse.up();
+  await expect(target.getByTestId("card-card-1")).toBeVisible(); await waitSaved(page);
+  await page.reload(); await expect(page.getByTestId("column-col-review").getByTestId("card-card-1")).toBeVisible();
+});
 
-  await expect(page.getByRole("log", { name: "Assistant conversation" })).toContainText(
-    "Moved Align roadmap themes to Discovery."
-  );
-  await expect(page.getByTestId("column-col-discovery").getByTestId("card-card-1")).toBeVisible();
-  await expect.poll(() => persistedBoard.columns[1].cardIds).toEqual(["card-1"]);
-  expect(submittedPrompt?.prompt).toBe(prompt);
-  expect(submittedPrompt?.board).toMatchObject({
-    columns: expect.arrayContaining([
-      expect.objectContaining({
-        id: "col-backlog",
-        cardIds: ["card-1"],
-      }),
-    ]),
-  });
+test("moves into an empty column using keyboard controls", async ({ page }) => {
+  await signIn(page);
+  const board = await (await page.request.get("/api/board")).json();
+  board.columns[0].cardIds.push(...board.columns[1].cardIds); board.columns[1].cardIds = [];
+  expect((await page.request.post("/api/board", { data: { board } })).ok()).toBeTruthy();
+  await page.reload();
+  const move = page.getByLabel("Move Align roadmap themes to column");
+  await move.focus(); await move.press("ArrowDown"); await move.press("Enter");
+  await expect(page.getByTestId("column-col-discovery").getByTestId("card-card-1")).toBeVisible(); await waitSaved(page);
+  await page.reload(); await expect(page.getByTestId("column-col-discovery").getByTestId("card-card-1")).toBeVisible();
+});
+
+test("assistant commits through the real API and survives reload", async ({ page }) => {
+  await signIn(page);
+  await page.getByLabel("Message to board assistant").fill("Move Align roadmap themes to Done");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByRole("log")).toContainText("Moved the card to Done.");
+  await expect(page.getByTestId("column-col-done").getByTestId("card-card-1")).toBeVisible();
+  await page.reload(); await expect(page.getByTestId("column-col-done").getByTestId("card-card-1")).toBeVisible();
+});
+
+test("another tab cannot overwrite a newer board", async ({ page, context }) => {
+  await signIn(page);
+  const other = await context.newPage(); await other.goto("/");
+  await expect(other.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  await page.getByLabel("Move Align roadmap themes to column").selectOption("col-done"); await waitSaved(page);
+  const title = other.getByLabel("Column title: Backlog", { exact: true });
+  await title.fill("Stale tab rename"); await title.press("Enter");
+  await expect(other.getByRole("alert").filter({ hasText: "changed" })).toContainText("changed in another request");
+  await other.getByRole("button", { name: "Discard local edits and reload" }).click();
+  await expect(other.getByTestId("column-col-done").getByTestId("card-card-1")).toBeVisible();
+  await expect(other.getByLabel("Column title: Backlog", { exact: true })).toHaveValue("Backlog");
+});
+
+test("a delayed assistant cannot overwrite another tab's manual edit", async ({ page, context }) => {
+  await signIn(page);
+  const other = await context.newPage(); await other.goto("/");
+  await expect(other.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  const started = page.waitForRequest(r => r.url().endsWith("/api/ai"));
+  await page.getByLabel("Message to board assistant").fill("Move first card");
+  await page.getByRole("button", { name: "Send", exact: true }).click(); await started;
+  await other.getByLabel("Move Gather customer signals to column").selectOption("col-done"); await waitSaved(other);
+  await expect(page.getByRole("alert").filter({ hasText: "changed" })).toContainText("changed");
+  const board = await (await page.request.get("/api/board")).json();
+  expect(board.columns[4].cardIds).toContain("card-2"); expect(board.columns[0].cardIds).toContain("card-1");
 });

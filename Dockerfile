@@ -1,8 +1,9 @@
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 
+ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
 COPY frontend ./
 RUN npm run build
 
@@ -12,7 +13,6 @@ WORKDIR /app
 
 COPY backend/requirements.txt ./backend/requirements.txt
 COPY backend/app ./backend/app
-COPY backend/static ./backend/static
 COPY --from=frontend-builder /app/frontend/out ./frontend/out
 
 RUN pip install --no-cache-dir --upgrade pip uv && \

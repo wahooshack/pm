@@ -1,115 +1,217 @@
-import importlib
-import sys
-from pathlib import Path
+from copy import deepcopy
 from unittest.mock import AsyncMock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import httpx
+import pytest
 
-from fastapi.testclient import TestClient
+from backend.app import main, database
+from backend.app.auth import COOKIE_NAME
 
 
-def test_database_initializes_and_loads_seed_board(tmp_path, monkeypatch):
-    db_path = tmp_path / "pm.db"
-    monkeypatch.setenv("PM_DB_PATH", str(db_path))
+def test_authentication_is_enforced_and_logout_revokes_token(client):
+    assert client.get("/api/board").status_code == 401
+    assert client.post("/api/board", json={}).status_code == 401
+    assert client.post("/api/ai", json={"prompt": "hello", "revision": 0}).status_code == 401
+    assert client.post("/api/login", json={"username": "user", "password": "wrong"}).status_code == 401
+    response = client.post("/api/login", json={"username": "user", "password": "password"})
+    assert "HttpOnly" in response.headers["set-cookie"]
+    assert "SameSite=strict" in response.headers["set-cookie"]
+    token = client.cookies.get(COOKIE_NAME)
+    assert client.get("/api/board").status_code == 200
+    assert client.post("/api/logout", json={}).status_code == 200
+    client.cookies.set(COOKIE_NAME, token)
+    assert client.get("/api/board").status_code == 401
 
-    import app.database as db_module
-    importlib.reload(db_module)
-    db_module.init_db()
 
-    board = db_module.load_board_for_user("user")
+def test_browser_write_boundary_and_size_limit(signed_in):
+    assert signed_in.post("/api/logout", json={}, headers={"Origin": "https://other.example"}).status_code == 403
+    assert signed_in.post("/api/logout", content="{}").status_code == 415
+    assert signed_in.post("/api/board", content=b"x" * (main.MAX_BODY_BYTES + 1),
+                          headers={"Content-Type": "application/json"}).status_code == 413
+    assert signed_in.get("/api/board").headers["cache-control"] == "no-store"
 
-    assert board["columns"][0]["title"] == "Backlog"
+
+def test_session_expiration_and_chunked_body_limits(signed_in):
+    chunks = (b"x" * 65536 for _ in range(17))
+    assert signed_in.post("/api/board", content=chunks,
+                          headers={"Content-Type": "application/json"}).status_code == 413
+    with database.get_connection() as connection:
+        connection.execute("UPDATE sessions SET expires_at = 0")
+    assert signed_in.get("/api/board").status_code == 401
+
+
+def test_concurrent_writes_have_exactly_one_winner(signed_in):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    original = database.load_board_for_user("user")
+    barrier = Barrier(2)
+
+    def save(title):
+        board = deepcopy(original)
+        board["columns"][0]["title"] = title
+        barrier.wait()
+        try:
+            return database.save_board_for_user("user", board)
+        except database.BoardConflict:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(save, ["First", "Second"]))
+    winners = [result for result in results if result is not None]
+    assert len(winners) == 1
+    assert database.load_board_for_user("user") == winners[0]
+
+
+def test_board_roundtrip_revision_and_ownership(signed_in):
+    board = signed_in.get("/api/board").json()
+    assert board["revision"] == 0
     assert len(board["cards"]) == 8
-    assert board["cards"]["card-1"]["title"] == "Align roadmap themes"
-
-
-def test_database_save_round_trip(tmp_path, monkeypatch):
-    db_path = tmp_path / "pm.db"
-    monkeypatch.setenv("PM_DB_PATH", str(db_path))
-
-    import app.database as db_module
-    importlib.reload(db_module)
-    db_module.init_db()
-
-    board = db_module.load_board_for_user("user")
     board["columns"][0]["title"] = "Sprint Ready"
-    board["cards"]["card-1"]["title"] = "Updated roadmap card"
-
-    saved = db_module.save_board_for_user("user", board)
-
-    assert saved["columns"][0]["title"] == "Sprint Ready"
-    assert saved["cards"]["card-1"]["title"] == "Updated roadmap card"
-
-
-def test_api_get_and_save_board(tmp_path, monkeypatch):
-    db_path = tmp_path / "pm.db"
-    monkeypatch.setenv("PM_DB_PATH", str(db_path))
-
-    import app.main as main_module
-    importlib.reload(main_module)
-
-    client = TestClient(main_module.app)
-
-    response = client.get("/api/board", params={"username": "user"})
+    response = signed_in.post("/api/board", json={"board": board})
     assert response.status_code == 200
-    payload = response.json()
-    assert payload["columns"][0]["title"] == "Backlog"
-
-    payload["columns"][0]["title"] = "Board Updated"
-    payload["cards"]["card-1"]["title"] = "Changed in API"
-
-    update_response = client.post(
-        "/api/board",
-        json={"username": "user", "board": payload},
-    )
-    assert update_response.status_code == 200
-    assert update_response.json()["columns"][0]["title"] == "Board Updated"
-    assert update_response.json()["cards"]["card-1"]["title"] == "Changed in API"
+    assert response.json()["revision"] == 1
+    assert signed_in.post("/api/board", json={"board": board}).status_code == 409
+    assert signed_in.get("/api/board").json() == response.json()
+    assert signed_in.get("/api/board?username=second").json() == response.json()
+    assert signed_in.post("/api/board", json={"username": "second", "board": response.json()}).status_code == 422
 
 
-def test_ai_route_calls_openrouter_and_returns_content(tmp_path, monkeypatch):
-    db_path = tmp_path / "pm.db"
-    monkeypatch.setenv("PM_DB_PATH", str(db_path))
-    monkeypatch.setenv("OPENROUTER_API_KEY", "mock-key")
+@pytest.mark.parametrize("mutation", [
+    lambda b: b["cards"].pop("card-1"),
+    lambda b: b["columns"][0]["cardIds"].append("card-1"),
+    lambda b: b["columns"][0]["cardIds"].remove("card-1"),
+    lambda b: b["columns"].clear(),
+    lambda b: b["columns"][0].update(id="unknown"),
+    lambda b: b["cards"]["card-1"].update(id="different"),
+    lambda b: b["cards"]["card-1"].update(title=123),
+    lambda b: b["columns"][0].update(title=" "),
+    lambda b: b.update(revision=True),
+])
+def test_invalid_board_never_changes_database(signed_in, mutation):
+    original = signed_in.get("/api/board").json()
+    board = deepcopy(original)
+    mutation(board)
+    assert signed_in.post("/api/board", json={"board": board}).status_code == 422
+    assert signed_in.get("/api/board").json() == original
 
-    import app.main as main_module
-    importlib.reload(main_module)
-    main_module.call_openrouter = AsyncMock(return_value={"model": "mock-model", "content": "4"})
 
-    client = TestClient(main_module.app)
-    response = client.post("/api/ai", json={"prompt": "2 + 2"})
+def test_multiple_users_share_public_ids_without_collisions(signed_in):
+    first = database.load_board_for_user("user")
+    second = database.load_board_for_user("second")
+    assert second == first
+    second["cards"]["card-1"]["title"] = "Second user's card"
+    database.save_board_for_user("second", second)
+    assert database.load_board_for_user("user") == first
+    with database.get_connection() as connection:
+        board_id = database.ensure_seed_board("second")["id"]
+        # The scoped foreign key refuses a column that belongs to a different board.
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("DELETE FROM cards WHERE board_id = ?", (board_id,))
+        connection.execute("DELETE FROM columns WHERE board_id = ?", (board_id,))
+        import sqlite3
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute("INSERT INTO cards (id,board_id,column_id,title,details,position) VALUES (?,?,?,?,?,?)",
+                               ("bad", board_id, "col-backlog", "Bad", "", 0))
 
+
+def test_static_assets_are_confined(client, tmp_path, monkeypatch):
+    export = tmp_path / "out"
+    export.mkdir()
+    (export / "index.html").write_text("<h1>Login</h1>")
+    (export / "asset.js").write_text("console.log('ok')")
+    (tmp_path / "private.txt").write_text("private")
+    (export / "folder").mkdir()
+    monkeypatch.setattr(main, "FRONTEND_DIST_DIR", export)
+    assert client.get("/").status_code == 200
+    assert client.get("/asset.js").headers["content-type"].startswith("text/javascript")
+    for path in ["/%2e%2e/private.txt", "/%2e%2e/%2e%2e/backend/requirements.txt",
+                 "/%5c..%5cprivate.txt", "/C:%5cprivate.txt", "/folder/", "/missing.js", "/api/missing"]:
+        assert client.get(path).status_code == 404
+    try:
+        (export / "escape").symlink_to(tmp_path, target_is_directory=True)
+    except OSError:
+        pass  # Windows may require permission for symlinks; traversal cases still run.
+    else:
+        assert client.get("/escape/private.txt").status_code == 404
+
+
+def test_ai_commits_authoritative_board(signed_in, monkeypatch):
+    monkeypatch.setattr(main, "call_openrouter", AsyncMock(return_value={"model": "mock", "content":
+        '{"message":"Moved.","actions":[{"type":"move_card","cardId":"card-1","columnId":"col-done"}]}'}))
+    response = signed_in.post("/api/ai", json={"prompt": "Move first card", "revision": 0})
     assert response.status_code == 200
-    assert response.json() == {"response": "4", "model": "mock-model"}
+    board = response.json()["board"]
+    assert board["revision"] == 1
+    assert "card-1" in board["columns"][4]["cardIds"]
+    assert signed_in.get("/api/board").json() == board
+    assert signed_in.post("/api/ai", json={"prompt": "hi", "revision": 0}).status_code == 409
 
 
-def test_ai_route_accepts_board_payload_and_applies_actions(tmp_path, monkeypatch):
-    db_path = tmp_path / "pm.db"
-    monkeypatch.setenv("PM_DB_PATH", str(db_path))
-    monkeypatch.setenv("OPENROUTER_API_KEY", "mock-key")
+@pytest.mark.parametrize("payload", [
+    {"prompt": "hi", "revision": 0, "conversation": 1},
+    {"prompt": "hi", "revision": 0, "board": "invalid"},
+    {"prompt": "hi", "revision": 0, "conversation": [{"role": "system", "content": "bad"}]},
+    {"prompt": "x" * 2001, "revision": 0},
+    {"prompt": "hi", "revision": 0, "conversation": [{"role": "user", "content": "x"}] * 21},
+])
+def test_ai_validation_precedes_provider_call(signed_in, monkeypatch, payload):
+    provider = AsyncMock()
+    monkeypatch.setattr(main, "call_openrouter", provider)
+    assert signed_in.post("/api/ai", json=payload).status_code == 422
+    provider.assert_not_called()
 
-    import app.main as main_module
-    importlib.reload(main_module)
-    main_module.call_openrouter = AsyncMock(
-        return_value={
-            "model": "mock-model",
-            "content": '{"message":"Moved the card.","actions":[{"type":"move_card","cardId":"card-1","columnId":"col-done"}]}',
-        }
-    )
 
-    client = TestClient(main_module.app)
-    board = {
-        "columns": [
-            {"id": "col-backlog", "title": "Backlog", "cardIds": ["card-1"]},
-            {"id": "col-done", "title": "Done", "cardIds": []},
-        ],
-        "cards": {"card-1": {"id": "card-1", "title": "Alpha", "details": "Test"}},
-    }
+@pytest.mark.parametrize("error,status", [(httpx.ReadTimeout("timeout"), 504),
+    (httpx.ConnectError("network"), 502), (RuntimeError("private provider failure"), 502)])
+def test_ai_errors_are_controlled(signed_in, monkeypatch, error, status):
+    monkeypatch.setattr(main, "call_openrouter", AsyncMock(side_effect=error))
+    response = signed_in.post("/api/ai", json={"prompt": "hi", "revision": 0})
+    assert response.status_code == status
+    assert "private" not in response.text
+    assert signed_in.get("/api/board").json()["revision"] == 0
 
-    response = client.post("/api/ai", json={"prompt": "Move card 1 to done", "board": board})
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["response"] == "Moved the card."
-    assert payload["board"]["columns"][1]["cardIds"] == ["card-1"]
-    assert payload["actions"][0]["type"] == "move_card"
+def test_ai_cannot_commit_after_intervening_write_or_logout(signed_in, monkeypatch):
+    async def intervening_write(prompt, model=None):
+        board = database.load_board_for_user("user")
+        board["cards"]["card-2"]["title"] = "Manual edit"
+        database.save_board_for_user("user", board)
+        return {"model": "mock", "content": '{"message":"Done","actions":[{"type":"delete_card","cardId":"card-1"}]}'}
+    monkeypatch.setattr(main, "call_openrouter", intervening_write)
+    assert signed_in.post("/api/ai", json={"prompt": "delete", "revision": 0}).status_code == 409
+    assert signed_in.get("/api/board").json()["cards"]["card-2"]["title"] == "Manual edit"
+
+    async def revoke_session(prompt, model=None):
+        with database.get_connection() as connection:
+            connection.execute("DELETE FROM sessions")
+        return {"model": "mock", "content": '{"message":"Done","actions":[{"type":"delete_card","cardId":"card-1"}]}'}
+    monkeypatch.setattr(main, "call_openrouter", revoke_session)
+    assert signed_in.post("/api/ai", json={"prompt": "delete", "revision": 1}).status_code == 401
+    assert "card-1" in database.load_board_for_user("user")["cards"]
+
+
+def test_legacy_migration_preserves_data_and_is_repeatable(tmp_path, monkeypatch):
+    import sqlite3
+    legacy = tmp_path / "legacy.db"
+    monkeypatch.setenv("PM_DB_PATH", str(legacy))
+    with sqlite3.connect(legacy) as connection:
+        connection.executescript("""
+        CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, display_name TEXT, created_at TEXT);
+        CREATE TABLE boards (id INTEGER PRIMARY KEY, user_id INTEGER UNIQUE, name TEXT, created_at TEXT, updated_at TEXT);
+        CREATE TABLE columns (id TEXT PRIMARY KEY, board_id INTEGER, title TEXT, position INTEGER);
+        CREATE TABLE cards (id TEXT PRIMARY KEY, board_id INTEGER, column_id TEXT, title TEXT, details TEXT,
+                            position INTEGER, created_at TEXT, updated_at TEXT);
+        INSERT INTO users VALUES (1,'user','User','original');
+        INSERT INTO boards VALUES (1,1,'Main','original','original');
+        """)
+        database._write_rows(connection, 1, database.DEFAULT_BOARD)
+        connection.execute("UPDATE cards SET title = 'Existing custom title', created_at = 'original', updated_at = 'original'")
+    database.init_db()
+    before = database.load_board_for_user("user")
+    assert before["cards"]["card-1"]["title"] == "Existing custom title"
+    database.init_db()
+    assert database.load_board_for_user("user") == before
+    assert len(database.load_board_for_user("second")["cards"]) == 8
+    with database.get_connection() as connection:
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert connection.execute("SELECT created_at FROM cards WHERE board_id=1").fetchone()[0] == "original"

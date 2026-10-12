@@ -1,29 +1,15 @@
 $ErrorActionPreference = "Stop"
-
-$rootDir = Resolve-Path (Join-Path $PSScriptRoot "..")
-Set-Location $rootDir
-
-$pythonCommand = Get-Command python -ErrorAction SilentlyContinue
-if (-not $pythonCommand) {
-    throw "Python is required but was not found on PATH. Install Python 3.12 and retry."
+$rootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    throw "Docker with Compose is required. Start Docker Desktop and retry."
 }
-
-if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-    & $pythonCommand.Source -m pip install --user uv
+if (-not (Test-Path -LiteralPath (Join-Path $rootDir ".env"))) {
+    Copy-Item -LiteralPath (Join-Path $rootDir ".env.example") -Destination (Join-Path $rootDir ".env")
+    Write-Host "Created .env. Set OPENROUTER_API_KEY there to enable the assistant."
 }
-
-if (-not (Test-Path ".venv")) {
-    & $pythonCommand.Source -m venv .venv
-}
-
-. .\.venv\Scripts\Activate.ps1
-uv pip install --python .\.venv\Scripts\python.exe -r .\backend\requirements.txt
-if (Test-Path ".\frontend\package.json") {
-    Set-Location .\frontend
-    if (-not (Test-Path "node_modules")) {
-        npm install
-    }
-    npm run build
-    Set-Location $rootDir
-}
-uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+Push-Location $rootDir
+try {
+    docker compose -p pm-mvp up --build --detach --wait
+    if ($LASTEXITCODE -ne 0) { throw "Docker startup failed (exit $LASTEXITCODE)." }
+    Write-Host "Project Management MVP: http://127.0.0.1:8000"
+} finally { Pop-Location }

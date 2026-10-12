@@ -2,41 +2,51 @@
 
 import { useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { LoginForm, VALID_PASSWORD, VALID_USERNAME } from "@/components/LoginForm";
-
-const AUTH_STORAGE_KEY = "kanban-demo-auth";
+import { LoginForm } from "@/components/LoginForm";
+import { api } from "@/lib/api";
 
 export default function Home() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [hasMounted, setHasMounted] = useState(false);
+  const [status, setStatus] = useState<"checking" | "signed-in" | "signed-out" | "signing-out">("checking");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedState = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
-    setIsAuthenticated(storedState === "authenticated");
-    setHasMounted(true);
+    const controller = new AbortController();
+    async function restoreSession() {
+      try {
+        await api("/api/session", undefined, controller.signal);
+        if (!controller.signal.aborted) setStatus("signed-in");
+      } catch {
+        if (!controller.signal.aborted) setStatus("signed-out");
+      }
+    }
+    void restoreSession();
+    return () => controller.abort();
   }, []);
 
-  const handleLogin = (username: string, password: string) => {
-    const isValid = username === VALID_USERNAME && password === VALID_PASSWORD;
-    if (isValid) {
-      window.sessionStorage.setItem(AUTH_STORAGE_KEY, "authenticated");
-      setIsAuthenticated(true);
+  const handleLogin = async (username: string, password: string) => {
+    await api("/api/login", { username, password });
+    setError(null);
+    setStatus("signed-in");
+  };
+
+  const handleLogout = async () => {
+    // Unmount the board immediately, aborting pending browser requests.
+    setStatus("signing-out");
+    try {
+      await api("/api/logout", {});
+      setError(null);
+    } catch {
+      setError("Sign out failed. Your server session may still be active. Retry sign out.");
+    } finally {
+      setStatus("signed-out");
     }
-    return isValid;
   };
 
-  const handleLogout = () => {
-    window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
-    setIsAuthenticated(false);
-  };
-
-  if (!hasMounted) {
-    return null;
+  if (status === "checking" || status === "signing-out") {
+    return <p role="status" className="p-8">{status === "checking" ? "Checking session..." : "Signing out..."}</p>;
   }
-
-  if (!isAuthenticated) {
-    return <LoginForm onSubmit={handleLogin} />;
+  if (status === "signed-out") {
+    return <>{error && <div role="alert" className="p-4">{error} <button onClick={() => void handleLogout()}>Retry sign out</button></div>}<LoginForm onSubmit={handleLogin} /></>;
   }
-
-  return <KanbanBoard onLogout={handleLogout} />;
+  return <KanbanBoard onLogout={() => void handleLogout()} onSessionExpired={() => setStatus("signed-out")} />;
 }

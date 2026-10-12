@@ -1,9 +1,10 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { ApiError } from "@/lib/api";
 
 type LoginFormProps = {
-  onSubmit: (username: string, password: string) => boolean;
+  onSubmit: (username: string, password: string) => Promise<void>;
 };
 
 const VALID_USERNAME = "user";
@@ -13,12 +14,19 @@ export const LoginForm = ({ onSubmit }: LoginFormProps) => {
   const [username, setUsername] = useState(VALID_USERNAME);
   const [password, setPassword] = useState(VALID_PASSWORD);
   const [error, setError] = useState("");
+  const [isBusy, setIsBusy] = useState(false);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const isValid = onSubmit(username, password);
-    if (!isValid) {
-      setError("Incorrect username or password.");
+    if (isBusy) return;
+    setIsBusy(true);
+    setError("");
+    try {
+      await onSubmit(username, password);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "Unable to sign in. Please retry.");
+    } finally {
+      setIsBusy(false);
     }
   };
 
@@ -69,9 +77,10 @@ export const LoginForm = ({ onSubmit }: LoginFormProps) => {
 
           <button
             type="submit"
+            disabled={isBusy}
             className="w-full rounded-2xl bg-[var(--secondary-purple)] px-4 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:opacity-90"
           >
-            Sign in
+            {isBusy ? "Signing in..." : "Sign in"}
           </button>
         </form>
       </div>

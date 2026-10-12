@@ -4,10 +4,11 @@ import sys
 from pathlib import Path
 
 import httpx
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.ai import (
+from backend.app.ai import (
     DEFAULT_MODEL,
     call_openrouter,
     generate_board_ai_response,
@@ -140,10 +141,8 @@ def test_generate_board_ai_response_ignores_invalid_actions_and_preserves_board(
 
     assert result["board"] == original_board
     assert board == original_board
-    assert result["actions"] == [
-        {"type": "move_card", "cardId": "missing-card", "columnId": "col-done"},
-        {"type": "rename_column", "columnId": "missing-column", "title": "Renamed"},
-    ]
+    assert result["actions"] == []
+    assert len(result["rejectedActions"]) == 3
 
 
 def test_generate_board_ai_response_returns_noop_for_malformed_and_empty_actions():
@@ -152,15 +151,8 @@ def test_generate_board_ai_response_returns_noop_for_malformed_and_empty_actions
     async def malformed_response(prompt, model=None):
         return {"model": "mock-model", "content": '{"message": "partial", "actions": ['}
 
-    malformed = asyncio.run(
-        generate_board_ai_response(
-            "Move Alpha",
-            board=board,
-            openrouter_client=malformed_response,
-        )
-    )
-    assert malformed["actions"] == []
-    assert malformed["board"] == board
+    with pytest.raises(RuntimeError, match="invalid JSON"):
+        asyncio.run(generate_board_ai_response("Move Alpha", board=board, openrouter_client=malformed_response))
 
     async def no_op_response(prompt, model=None):
         return {
@@ -178,3 +170,33 @@ def test_generate_board_ai_response_returns_noop_for_malformed_and_empty_actions
     assert no_op["message"] == "No changes needed."
     assert no_op["actions"] == []
     assert no_op["board"] == board
+
+
+def test_all_supported_actions_and_empty_details():
+    from backend.app.ai import apply_board_actions
+    board = make_board()
+    actions = [
+        {"type": "update_card_details", "cardId": "card-1", "details": ""},
+        {"type": "rename_card", "cardId": "card-1", "title": "Renamed"},
+        {"type": "rename_column", "columnId": "col-done", "title": "Finished"},
+        {"type": "add_card", "columnId": "col-done", "title": "New", "details": ""},
+        {"type": "move_card", "cardId": "card-1", "columnId": "col-done"},
+        {"type": "delete_card", "cardId": "card-1"},
+    ]
+    applied, rejected = [], []
+    changed = apply_board_actions(board, actions, applied, rejected)
+    assert len(applied) == 6 and rejected == []
+    assert changed["columns"][1]["title"] == "Finished"
+    assert list(changed["cards"].values())[0]["details"] == ""
+    assert board["cards"]["card-1"]["details"] == "Test"
+
+
+@pytest.mark.parametrize("response", [None, {}, {"choices": []}, {"choices": [None]},
+    {"choices": [{"message": {"content": None}}]}])
+def test_provider_invalid_shapes_are_rejected(monkeypatch, response):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "mock-key")
+    original = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda timeout: original(timeout=timeout,
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response))))
+    with pytest.raises(RuntimeError):
+        asyncio.run(call_openrouter("hi"))

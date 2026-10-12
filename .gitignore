@@ -174,3 +174,9 @@ cython_debug/
 
 .DS_Store
 
+
+# Runtime board data and local backups
+backend/data/
+*.db-wal
+*.db-shm
+*.db-journal

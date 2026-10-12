@@ -1,259 +1,163 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCorners,
-  pointerWithin,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragStartEvent,
+  DndContext, DragOverlay, PointerSensor, KeyboardSensor, useSensor, useSensors,
+  closestCorners, pointerWithin, type CollisionDetection, type DragEndEvent,
 } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { createId, moveCard, type BoardData } from "@/lib/kanban";
+import { api, ApiError } from "@/lib/api";
 
-type KanbanBoardProps = {
-  onLogout?: () => void;
-};
-
-const API_USERNAME = "user";
-
-type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-};
-
+type KanbanBoardProps = { onLogout?: () => void; onSessionExpired?: () => void };
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 const pointerWithinOrClosestCorners: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args);
-  return pointerCollisions.length > 0 ? pointerCollisions : closestCorners(args);
+  const collisions = pointerWithin(args);
+  return collisions.length ? collisions : closestCorners(args);
 };
 
-const saveBoardToBackend = async (board: BoardData) => {
-  const response = await fetch("/api/board", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: API_USERNAME, board }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Unable to save the board.");
-  }
-
-  return (await response.json()) as BoardData;
-};
-
-export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
-  const [conversation, setConversation] = useState<ChatMessage[]>([
-    {
-      id: createId("chat"),
-      role: "assistant",
-      content: "Hi! Ask me to move, rename, or add cards on the board.",
-    },
-  ]);
+export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) => {
+  const [board, setBoard] = useState<BoardData | null>(null);
+  const [conversation, setConversation] = useState<ChatMessage[]>([]);
   const [aiPrompt, setAiPrompt] = useState("");
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [isAiBusy, setIsAiBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unsaved, setUnsaved] = useState<BoardData | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const requestController = useRef<AbortController | null>(null);
+  const busy = useRef(false);
+  const expired = useRef(onSessionExpired);
+  useEffect(() => { expired.current = onSessionExpired; }, [onSessionExpired]);
 
   useEffect(() => {
-    let isActive = true;
-
-    const loadBoard = async () => {
+    const controller = new AbortController();
+    requestController.current = controller;
+    async function load() {
       try {
-        setIsLoading(true);
-        const response = await fetch(`/api/board?username=${encodeURIComponent(API_USERNAME)}`);
-
-        if (!response.ok) {
-          throw new Error("Unable to load the board.");
+        const data = await api<BoardData>("/api/board", undefined, controller.signal);
+        if (!controller.signal.aborted) {
+          setBoard(data); setError(null); setUnsaved(null); setConflict(false);
         }
-
-        const data = (await response.json()) as BoardData;
-
-        if (isActive) {
-          setBoard(data);
-          setError(null);
-        }
-      } catch {
-        if (isActive) {
-          setError("Unable to load the board. Showing the last local copy.");
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          if (cause instanceof ApiError && cause.status === 401) expired.current?.();
+          setError("Unable to load the board. Retry to load your saved data.");
         }
       } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
+        if (!controller.signal.aborted) setIsLoading(false);
       }
-    };
-
-    void loadBoard();
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
+    }
+    void load();
+    return () => controller.abort();
+  }, [loadAttempt]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+  const disabled = isLoading || isSaving || isAiBusy || !!unsaved || conflict;
 
-  const cardsById = useMemo(() => board.cards, [board.cards]);
-
-  const queueBoardSave = async (nextBoard: BoardData) => {
-    setBoard(nextBoard);
-    try {
-      const savedBoard = await saveBoardToBackend(nextBoard);
-      setBoard(savedBoard);
-      setError(null);
-    } catch {
-      setError("Unable to save the board. Your latest changes may not be persisted.");
-    }
+  const reportFailure = (cause: unknown, fallback: string) => {
+    if (cause instanceof ApiError && cause.status === 401) expired.current?.();
+    if (cause instanceof ApiError && cause.status === 409) setConflict(true);
+    setError(cause instanceof ApiError ? cause.message : fallback);
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveCardId(event.active.id as string);
+  const saveBoard = async (next: BoardData, focusId?: string) => {
+    if (busy.current || requestController.current?.signal.aborted) return;
+    busy.current = true;
+    setIsSaving(true);
+    setBoard(next);
+    const signal = requestController.current?.signal;
+    try {
+      const saved = await api<BoardData>("/api/board", { board: next }, signal);
+      if (!signal?.aborted) {
+        setBoard(saved); setUnsaved(null); setError(null);
+        if (focusId) requestAnimationFrame(() => {
+          if (!signal?.aborted) document.getElementById(focusId)?.focus();
+        });
+      }
+    } catch (cause) {
+      if (!signal?.aborted) {
+        setUnsaved(next);
+        reportFailure(cause, "Unable to save. Your edits are kept here; retry or reload the saved board.");
+      }
+    } finally {
+      if (!signal?.aborted) { busy.current = false; setIsSaving(false); }
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
     setActiveCardId(null);
-
-    if (!over || active.id === over.id) {
-      return;
-    }
-
-    const nextBoard = {
-      ...board,
-      columns: moveCard(board.columns, active.id as string, over.id as string),
-    };
-
-    void queueBoardSave(nextBoard);
+    if (!board || disabled || busy.current || !event.over || event.active.id === event.over.id) return;
+    void saveBoard({ ...board, columns: moveCard(board.columns, String(event.active.id), String(event.over.id)) }, `drag-${event.active.id}`);
   };
-
-  const handleRenameColumn = (columnId: string, title: string) => {
-    const nextBoard = {
-      ...board,
-      columns: board.columns.map((column) =>
-        column.id === columnId ? { ...column, title } : column
-      ),
-    };
-
-    void queueBoardSave(nextBoard);
+  const handleRenameColumn = (id: string, title: string) => {
+    if (!board || disabled || busy.current) return;
+    void saveBoard({ ...board, columns: board.columns.map(c => c.id === id ? { ...c, title } : c) });
   };
-
   const handleAddCard = (columnId: string, title: string, details: string) => {
+    if (!board || disabled || busy.current) return;
     const id = createId("card");
-    const nextBoard = {
-      ...board,
-      cards: {
-        ...board.cards,
-        [id]: { id, title, details: details || "No details yet." },
-      },
-      columns: board.columns.map((column) =>
-        column.id === columnId
-          ? { ...column, cardIds: [...column.cardIds, id] }
-          : column
-      ),
-    };
-
-    void queueBoardSave(nextBoard);
+    void saveBoard({ ...board, cards: { ...board.cards, [id]: { id, title, details } },
+      columns: board.columns.map(c => c.id === columnId ? { ...c, cardIds: [...c.cardIds, id] } : c) });
   };
-
-  const handleDeleteCard = (columnId: string, cardId: string) => {
-    const nextBoard = {
-      ...board,
-      cards: Object.fromEntries(
-        Object.entries(board.cards).filter(([id]) => id !== cardId)
-      ),
-      columns: board.columns.map((column) =>
-        column.id === columnId
-          ? {
-              ...column,
-              cardIds: column.cardIds.filter((id) => id !== cardId),
-            }
-          : column
-      ),
-    };
-
-    void queueBoardSave(nextBoard);
+  const handleEditCard = (id: string, title: string, details: string) => {
+    if (!board || disabled || busy.current) return;
+    void saveBoard({ ...board, cards: { ...board.cards, [id]: { ...board.cards[id], title, details } } }, `edit-${id}`);
   };
-
-  const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const handleMoveCard = (cardId: string, columnId: string) => {
+    if (!board || disabled || busy.current) return;
+    void saveBoard({ ...board, columns: moveCard(board.columns, cardId, columnId) }, `move-${cardId}`);
+  };
+  const handleDeleteCard = (columnId: string, id: string) => {
+    if (!board || disabled || busy.current) return;
+    void saveBoard({ ...board, cards: Object.fromEntries(Object.entries(board.cards).filter(([key]) => key !== id)),
+      columns: board.columns.map(c => ({ ...c, cardIds: c.cardIds.filter(key => key !== id) })) }, `column-title-${columnId}`);
+  };
+  const reload = () => { setIsLoading(true); setLoadAttempt(current => current + 1); };
 
   const handleAiSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const trimmed = aiPrompt.trim();
-    if (!trimmed || isAiBusy) {
-      return;
-    }
-
-    const userMessage: ChatMessage = {
-      id: createId("chat"),
-      role: "user",
-      content: trimmed,
-    };
-
+    const prompt = aiPrompt.trim();
+    if (!board || !prompt || disabled || busy.current) return;
+    busy.current = true; setIsAiBusy(true); setError(null);
+    const userMessage: ChatMessage = { id: createId("chat"), role: "user", content: prompt };
     const nextConversation = [...conversation, userMessage];
-    setConversation(nextConversation);
-    setAiPrompt("");
-    setIsAiBusy(true);
-
+    setConversation(nextConversation); setAiPrompt("");
+    const signal = requestController.current?.signal;
     try {
-      const response = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: trimmed,
-          board,
-          conversation: nextConversation,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("AI request failed.");
+      const result = await api<{ response: string; board: BoardData }>("/api/ai", {
+        prompt, revision: board.revision,
+        conversation: conversation.slice(-20).map(({ role, content }) => ({ role, content })),
+      }, signal);
+      if (!signal?.aborted) {
+        setBoard(result.board);
+        setConversation(current => [...current, { id: createId("chat"), role: "assistant", content: result.response }]);
       }
-
-      const payload = (await response.json()) as {
-        response: string;
-        board?: BoardData;
-        actions?: Array<Record<string, unknown>>;
-      };
-
-      const assistantMessage: ChatMessage = {
-        id: createId("chat"),
-        role: "assistant",
-        content: payload.response || "I processed that request.",
-      };
-
-      setConversation((current) => [...current, assistantMessage]);
-
-      if (payload.board && JSON.stringify(payload.board) !== JSON.stringify(board)) {
-        const savedBoard = await saveBoardToBackend(payload.board);
-        setBoard(savedBoard);
-        setError(null);
+    } catch (cause) {
+      if (!signal?.aborted) {
+        setAiPrompt(prompt);
+        reportFailure(cause, "The assistant request did not complete. Reload the board before retrying if the connection was lost.");
       }
-    } catch {
-      setConversation((current) => [
-        ...current,
-        {
-          id: createId("chat"),
-          role: "assistant",
-          content: "I couldn’t process that request right now.",
-        },
-      ]);
-      setError("The assistant couldn’t complete the request.");
     } finally {
-      setIsAiBusy(false);
+      if (!signal?.aborted) { busy.current = false; setIsAiBusy(false); }
     }
   };
+
+  if (!board) {
+    return <main className="p-8">
+      {onLogout && <button onClick={onLogout}>Log out</button>}
+      {isLoading ? <p role="status">Loading board...</p> : <><p role="alert">{error}</p><button onClick={reload}>Retry loading board</button></>}
+    </main>;
+  }
+  const activeCard = activeCardId ? board.cards[activeCardId] : null;
 
   return (
     <div className="relative overflow-hidden">
@@ -311,6 +215,8 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
         {error ? (
           <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {error}
+            {unsaved && !conflict && <button disabled={isSaving} onClick={() => void saveBoard(unsaved)} className="ml-3 underline">Retry save</button>}
+            <button disabled={isSaving || isAiBusy} onClick={reload} className="ml-3 underline">{unsaved ? "Discard local edits and reload" : "Reload saved board"}</button>
           </div>
         ) : null}
 
@@ -320,11 +226,13 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
           </div>
         ) : null}
 
+        {isSaving && <p role="status">Saving board...</p>}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <DndContext
             sensors={sensors}
             collisionDetection={pointerWithinOrClosestCorners}
-            onDragStart={handleDragStart}
+            onDragStart={(event) => { if (!disabled) setActiveCardId(String(event.active.id)); }}
+            onDragCancel={() => setActiveCardId(null)}
             onDragEnd={handleDragEnd}
           >
             <section className="grid gap-6 lg:grid-cols-5">
@@ -336,6 +244,10 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
                   onRename={handleRenameColumn}
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}
+                  onEditCard={handleEditCard}
+                  onMoveCard={handleMoveCard}
+                  columns={board.columns}
+                  disabled={disabled}
                 />
               ))}
             </section>
@@ -376,15 +288,18 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
 
             <form onSubmit={handleAiSubmit} className="mt-4 flex gap-2">
               <input
+                aria-label="Message to board assistant"
+                maxLength={2000}
+                disabled={disabled}
                 value={aiPrompt}
                 onChange={(event) => setAiPrompt(event.target.value)}
                 placeholder="Ask the board assistant..."
-                className="flex-1 rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-3 py-2 text-sm outline-none transition focus:border-[var(--primary-blue)]"
+                className="min-w-0 flex-1 rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-3 py-2 text-sm outline-none transition focus:border-[var(--primary-blue)]"
               />
               <button
                 type="submit"
-                disabled={isAiBusy}
-                className="rounded-2xl bg-[var(--primary-blue)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={disabled}
+                className="rounded-2xl bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isAiBusy ? "Working..." : "Send"}
               </button>

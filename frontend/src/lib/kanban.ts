@@ -11,11 +11,13 @@ export type Column = {
 };
 
 export type BoardData = {
+  revision: number;
   columns: Column[];
   cards: Record<string, Card>;
 };
 
 export const initialData: BoardData = {
+  revision: 0,
   columns: [
     { id: "col-backlog", title: "Backlog", cardIds: ["card-1", "card-2"] },
     { id: "col-discovery", title: "Discovery", cardIds: ["card-3"] },

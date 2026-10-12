@@ -11,6 +11,10 @@ type KanbanColumnProps = {
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
+  onEditCard: (cardId: string, title: string, details: string) => void;
+  onMoveCard: (cardId: string, columnId: string) => void;
+  columns: Column[];
+  disabled: boolean;
 };
 
 export const KanbanColumn = ({
@@ -18,10 +22,10 @@ export const KanbanColumn = ({
   cards,
   onRename,
   onAddCard,
-  onDeleteCard,
+  onDeleteCard, onEditCard, onMoveCard, columns, disabled,
 }: KanbanColumnProps) => {
   const droppableId = cards.length === 0 ? `${column.id}-empty-zone` : column.id;
-  const { setNodeRef, isOver } = useDroppable({ id: droppableId });
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId, disabled });
 
   return (
     <section
@@ -41,10 +45,22 @@ export const KanbanColumn = ({
             </span>
           </div>
           <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
+            id={`column-title-${column.id}`}
+            key={column.title}
+            defaultValue={column.title}
+            disabled={disabled}
+            maxLength={200}
+            onBlur={(event) => {
+              const title = event.target.value.trim();
+              if (title && title !== column.title) onRename(column.id, title);
+              else event.target.value = column.title;
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") event.currentTarget.value = column.title;
+              if (event.key === "Enter" || event.key === "Escape") event.currentTarget.blur();
+            }}
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
-            aria-label="Column title"
+            aria-label={`Column title: ${column.title}`}
           />
         </div>
       </div>
@@ -55,6 +71,11 @@ export const KanbanColumn = ({
               key={card.id}
               card={card}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
+              onEdit={onEditCard}
+              onMove={onMoveCard}
+              columns={columns}
+              columnId={column.id}
+              disabled={disabled}
             />
           ))}
         </SortableContext>
@@ -68,6 +89,7 @@ export const KanbanColumn = ({
         )}
       </div>
       <NewCardForm
+        disabled={disabled}
         onAdd={(title, details) => onAddCard(column.id, title, details)}
       />
     </section>
