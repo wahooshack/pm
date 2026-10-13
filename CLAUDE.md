@@ -42,4 +42,4 @@ powershell -ExecutionPolicy Bypass -File scripts/stop.ps1    # or bash scripts/s
 
 ## Testing notes
 
-Automated tests must never call the live OpenRouter provider; backend tests use mock transports and e2e mocks only the provider. Backend tests use isolated databases via `conftest.py`.
+`.github/workflows/ci.yml` runs the backend tests, lint, TypeScript, unit and browser tests on pushes to `main` and on pull requests. Automated tests must never call the live OpenRouter provider; backend tests use mock transports and e2e mocks only the provider. Backend tests use isolated databases via `conftest.py`.

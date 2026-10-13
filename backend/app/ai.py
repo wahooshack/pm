@@ -21,6 +21,10 @@ class AssistantNotConfigured(Exception):
     pass
 
 
+class AssistantReplyTooLong(Exception):
+    pass
+
+
 def build_board_prompt(board: dict[str, Any], user_prompt: str, conversation: list[dict[str, Any]]) -> str:
     history = "\n".join(f"{entry['role']}: {entry['content']}" for entry in conversation) or "No prior conversation."
     board_json = json.dumps(board, ensure_ascii=False, indent=2)
@@ -226,6 +230,8 @@ async def call_openrouter(prompt: str, model: str | None = None) -> dict[str, An
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
             raise ValueError("Missing choices")
+        if choices[0].get("finish_reason") == "length":
+            raise AssistantReplyTooLong("The assistant's reply was cut off at the token limit.")
         message = choices[0]["message"]
         raw_content = message["content"]
         if isinstance(raw_content, list):

@@ -90,8 +90,11 @@ def init_db() -> None:
             connection.execute("ALTER TABLE columns RENAME TO columns_legacy")
             connection.execute(COLUMN_SQL)
             connection.execute(CARD_SQL)
-            connection.execute("INSERT INTO columns SELECT * FROM columns_legacy")
-            connection.execute("INSERT INTO cards SELECT * FROM cards_legacy")
+            connection.execute("""INSERT INTO columns (id, board_id, title, position)
+                SELECT id, board_id, title, position FROM columns_legacy""")
+            connection.execute("""INSERT INTO cards
+                (id, board_id, column_id, title, details, position, created_at, updated_at)
+                SELECT id, board_id, column_id, title, details, position, created_at, updated_at FROM cards_legacy""")
             connection.execute("DROP TABLE cards_legacy")
             connection.execute("DROP TABLE columns_legacy")
         elif not column_info:
@@ -135,7 +138,7 @@ def _read_board(connection, board_id: int) -> dict:
     row = connection.execute("SELECT revision FROM boards WHERE id = ?", (board_id,)).fetchone()
     columns = connection.execute("SELECT id, title FROM columns WHERE board_id = ? ORDER BY position",
                                  (board_id,)).fetchall()
-    cards = connection.execute("SELECT id, column_id, title, details FROM cards WHERE board_id = ? ORDER BY position",
+    cards = connection.execute("SELECT id, column_id, title, details FROM cards WHERE board_id = ? ORDER BY column_id, position",
                                (board_id,)).fetchall()
     return {"revision": row["revision"],
             "columns": [{"id": column["id"], "title": column["title"],

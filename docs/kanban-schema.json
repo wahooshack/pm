@@ -133,8 +133,7 @@
           "name": "position",
           "type": "INTEGER",
           "constraints": [
-            "NOT NULL",
-            "DEFAULT 0"
+            "NOT NULL"
           ]
         }
       ],
@@ -192,8 +191,7 @@
           "name": "position",
           "type": "INTEGER",
           "constraints": [
-            "NOT NULL",
-            "DEFAULT 0"
+            "NOT NULL"
           ]
         },
         {

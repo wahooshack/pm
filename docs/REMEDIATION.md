@@ -88,3 +88,25 @@ Live OpenRouter (`nvidia/nemotron-3-super-120b-a12b:free`, real key, isolated te
 | L13: structure and accessibility | `review.md` moved to `docs/`; card titles are `h3`; `AGENTS.md` notes the darker supporting-text gray. |
 
 Validation: backend 40 passed; frontend lint, TypeScript and 20 unit tests passed; production build and 9 browser tests passed; Docker image rebuilt with pinned uv, healthy, smoke test passed, existing board untouched. Live OpenRouter: 7 of 7 scenarios succeeded in 1.5-8.1 seconds against the simplified `ai.py`, and a provider call from inside the container succeeded.
+
+## Second code review (October 12, 2026)
+
+From `docs/oc_code_review.md`, assessed in `docs/claude_code_review.md`:
+
+| Finding | Resolution |
+| --- | --- |
+| M1: an AI-grown board could exceed the manual save body limit | The AI route rejects (422) any result whose board, encoded as the browser would send it, exceeds `MAX_BODY_BYTES`, so every stored board stays saveable. Tested with multi-byte text. |
+| M2: session expiry during a save dropped the edit silently | The sign-in screen explains the expiry and what was not saved (manual edit or assistant changes). Unit tests added. |
+| L1, L2 | Not changed: same-column drops follow the sortable preview, and the error is already cleared when a new assistant request starts. |
+| L3: a retried assistant message was duplicated | A failed prompt is removed from the transcript and history when it returns to the input. Unit test added. |
+| L4, L7 | Deferred as product/hardening choices. |
+| L5: truncated provider replies looked like an outage | `finish_reason == "length"` returns a specific 502 asking for fewer changes. Tested. |
+| L6: non-JSON error bodies hid the status | `api()` tolerates non-JSON bodies, so 401/409 handling still applies. Unit test added. |
+| L8, L9 | The migration names its columns; card reads order by column and position. |
+| L10: plain `pytest` failed | `pytest.ini` sets the project root on the path; the `sys.path` hack is removed. |
+| L11: schema listed nonexistent position defaults | Removed from `docs/kanban-schema.json`. |
+| L12: no CI | `.github/workflows/ci.yml` runs backend tests, lint, TypeScript, unit tests and the browser suite. |
+| L13: duplicated seed board | Browser tests reset through a test-only route on the e2e server that writes the backend `DEFAULT_BOARD`; the frontend fixture serves only mocked unit tests. |
+| L14: housekeeping | `docs/code_review.md` restored. |
+
+Validation: backend 43 passed (both `python -m pytest` and `pytest`); frontend lint, TypeScript and 24 unit tests passed; production build and 9 browser tests passed. Docker was not available on this host, so the image was not rebuilt; live OpenRouter was not rechecked.

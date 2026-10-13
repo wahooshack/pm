@@ -153,6 +153,8 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
       }
     } catch (cause) {
       if (!signal?.aborted) {
+        // The prompt returns to the input for retry, so drop it from the transcript and history.
+        setConversation(current => current.filter(message => message.id !== userMessage.id));
         setAiPrompt(prompt);
         reportFailure(cause, "The assistant request did not complete. Reload the board before retrying if the connection was lost.",
           "Your session expired, so the assistant's changes were not saved. Sign in again and resend your message.");

@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from .ai import AssistantNotConfigured, call_openrouter, generate_board_ai_response
+from .ai import AssistantNotConfigured, AssistantReplyTooLong, call_openrouter, generate_board_ai_response
 from .auth import COOKIE_NAME, SESSION_SECONDS, create_session, delete_session, require_user, token_hash
 from .database import BoardConflict, init_db, load_board_for_user, save_board_for_user
 from .models import AIRequest, Board, BoardWrite, Login
@@ -147,6 +147,10 @@ async def ai_chat(payload: AIRequest, request: Request, username: str = Depends(
     except AssistantNotConfigured as exc:
         logger.warning("AI provider not configured: %s", exc)
         raise HTTPException(status_code=503, detail="The assistant is not configured. Set OPENROUTER_API_KEY in .env.") from exc
+    except AssistantReplyTooLong as exc:
+        logger.warning("AI provider reply truncated at the token limit")
+        raise HTTPException(status_code=502,
+            detail="The assistant's reply was too long. Ask for fewer changes at once.") from exc
     except httpx.TimeoutException as exc:
         logger.warning("AI provider timed out")
         raise HTTPException(status_code=504, detail="The assistant timed out. Please try again.") from exc

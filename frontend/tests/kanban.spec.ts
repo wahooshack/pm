@@ -1,5 +1,4 @@
 import { expect, test, type Page } from "@playwright/test";
-import { initialData } from "../src/test/fixtures";
 
 const signIn = async (page: Page) => {
   await page.goto("/");
@@ -15,8 +14,7 @@ const waitSaved = async (page: Page) => {
 
 test.beforeEach(async ({ page }) => {
   expect((await page.request.post("/api/login", { data: { username: "user", password: "password" } })).ok()).toBeTruthy();
-  const current = await (await page.request.get("/api/board")).json();
-  expect((await page.request.post("/api/board", { data: { board: { ...initialData, revision: current.revision } } })).ok()).toBeTruthy();
+  expect((await page.request.post("/api/test/reset", { data: {} })).ok()).toBeTruthy();
   await page.request.post("/api/logout", { data: {} });
 });
 

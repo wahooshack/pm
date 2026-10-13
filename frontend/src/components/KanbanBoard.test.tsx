@@ -216,3 +216,34 @@ it("explains on the sign-in screen that an expired session dropped the assistant
   await screen.findByRole("heading", { name: "Sign in" });
   expect(screen.getByRole("alert")).toHaveTextContent("the assistant's changes were not saved");
 });
+
+it("does not duplicate a failed assistant message when it is retried", async () => {
+  const original = global.fetch; let fail = true; const bodies: unknown[] = [];
+  global.fetch = vi.fn((input, init) => {
+    if (String(input) !== "/api/ai") return original(input, init);
+    bodies.push(JSON.parse(String(init?.body)));
+    return Promise.resolve(fail ? response({ detail: "Assistant unavailable" }, 502) : response({ response: "Moved it", board }));
+  });
+  render(<KanbanBoard />); await loaded();
+  await userEvent.type(screen.getByLabelText("Message to board assistant"), "Move first card");
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText("Assistant unavailable");
+  expect(screen.queryByText("Move first card")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Message to board assistant")).toHaveValue("Move first card");
+  fail = false;
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText("Moved it");
+  expect(screen.getAllByText("Move first card")).toHaveLength(1);
+  expect(bodies[1]).toEqual({ prompt: "Move first card", revision: 0, conversation: [] });
+});
+
+it("treats a non-JSON 401 as session expiry", async () => {
+  signedIn = true; const original = global.fetch;
+  global.fetch = vi.fn((input, init) => init?.method === "POST" && String(input) === "/api/board"
+    ? Promise.resolve({ ok: false, status: 401, json: async () => { throw new SyntaxError("Unexpected token <"); } } as unknown as Response)
+    : original(input, init));
+  render(<Home />); await loaded();
+  await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done");
+  await screen.findByRole("heading", { name: "Sign in" });
+  expect(screen.getByRole("alert")).toHaveTextContent("your last change was not saved");
+});

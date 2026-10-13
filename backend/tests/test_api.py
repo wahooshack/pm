@@ -205,6 +205,14 @@ def test_ai_errors_are_controlled(signed_in, monkeypatch, error, status):
     assert signed_in.get("/api/board").json()["revision"] == 0
 
 
+def test_ai_truncated_reply_is_reported_specifically(signed_in, monkeypatch):
+    from backend.app.ai import AssistantReplyTooLong
+    monkeypatch.setattr(main, "call_openrouter", AsyncMock(side_effect=AssistantReplyTooLong("cut off")))
+    response = signed_in.post("/api/ai", json={"prompt": "hi", "revision": 0})
+    assert response.status_code == 502
+    assert "too long" in response.json()["detail"]
+
+
 def test_ai_without_api_key_reports_configuration(signed_in):
     # conftest removes OPENROUTER_API_KEY, so the real provider wrapper must refuse before any request.
     response = signed_in.post("/api/ai", json={"prompt": "hi", "revision": 0})

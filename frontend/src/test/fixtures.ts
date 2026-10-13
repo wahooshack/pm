@@ -1,6 +1,6 @@
 import type { BoardData } from "../lib/kanban";
 
-// Mirrors DEFAULT_BOARD in backend/app/database.py; used to reset boards in tests.
+// Mirrors DEFAULT_BOARD in backend/app/database.py for mocked unit tests; browser tests reset through the backend seed.
 export const initialData: BoardData = {
   revision: 0,
   columns: [

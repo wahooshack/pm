@@ -1,12 +1,8 @@
 import asyncio
 import json
-import sys
-from pathlib import Path
 
 import httpx
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app.ai import (
     DEFAULT_MODEL,
@@ -212,4 +208,15 @@ def test_provider_invalid_shapes_are_rejected(monkeypatch, response):
     monkeypatch.setattr(httpx, "AsyncClient", lambda timeout: original(timeout=timeout,
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response))))
     with pytest.raises(RuntimeError):
+        asyncio.run(call_openrouter("hi"))
+
+
+def test_provider_reply_cut_off_at_token_limit_is_reported(monkeypatch):
+    from backend.app.ai import AssistantReplyTooLong
+    monkeypatch.setenv("OPENROUTER_API_KEY", "mock-key")
+    response = {"choices": [{"finish_reason": "length", "message": {"content": '{"message": "Added", "actions": ['}}]}
+    original = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda timeout: original(timeout=timeout,
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response))))
+    with pytest.raises(AssistantReplyTooLong):
         asyncio.run(call_openrouter("hi"))

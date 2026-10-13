@@ -12,9 +12,10 @@ export async function api<T>(path: string, body?: unknown, signal?: AbortSignal)
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
-  const payload = await response.json();
+  // Proxies and gateways can return non-JSON errors; the status must still reach callers.
+  const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new ApiError(response.status, typeof payload.detail === "string" ? payload.detail : "The request could not be completed.");
+    throw new ApiError(response.status, typeof payload?.detail === "string" ? payload.detail : "The request could not be completed.");
   }
   return payload as T;
 }
