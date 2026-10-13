@@ -75,6 +75,17 @@ it("cancels card edits without saving", async () => {
   expect(posts).toBe(0); expect(screen.getByText("Align roadmap themes")).toBeInTheDocument();
 });
 
+it("disables the assistant while a card editor is open", async () => {
+  render(<KanbanBoard />); await loaded();
+  await userEvent.type(screen.getByLabelText("Message to board assistant"), "Rename first card");
+  await userEvent.click(screen.getByRole("button", { name: "Edit Align roadmap themes" }));
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  expect(screen.getByLabelText("Message to board assistant")).toBeDisabled();
+  expect(screen.getByText(/Save or cancel the open card edit/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+});
+
 it("offers movement without requiring a pointer drag", async () => {
   render(<KanbanBoard />); await loaded();
   await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done"); await saved();

@@ -2,6 +2,8 @@
 
 Reviewed on October 12, 2026. Revision: `b82d5a2` (`main`, in sync with `origin/main`). No application code or configuration was changed; this report is the only repository change.
 
+> Status: M1-M3 were resolved on October 12, 2026, including a live OpenRouter check; see `docs/REMEDIATION.md`. Low findings remain open.
+
 ## Summary
 
 The application is in good shape. The October 8 remediation (`review.md`, `docs/REMEDIATION.md`) holds up: authentication, static-file confinement, revision-checked writes, strict board validation and server-side AI commits are all correctly implemented and covered by tests. No critical or high-severity defects were found.

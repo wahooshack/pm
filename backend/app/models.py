@@ -4,9 +4,10 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+MAX_TITLE, MAX_DETAILS, MAX_CARDS = 200, 5000, 500
 Identifier = Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9_-]{1,100}$")]
-Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
-Details = Annotated[str, StringConstraints(max_length=5000)]
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_TITLE)]
+Details = Annotated[str, StringConstraints(max_length=MAX_DETAILS)]
 FIXED_COLUMNS = ["col-backlog", "col-discovery", "col-progress", "col-review", "col-done"]
 
 
@@ -29,7 +30,7 @@ class Column(StrictModel):
 class Board(StrictModel):
     revision: int = Field(ge=0)
     columns: list[Column] = Field(min_length=5, max_length=5)
-    cards: dict[Identifier, Card] = Field(max_length=500)
+    cards: dict[Identifier, Card] = Field(max_length=MAX_CARDS)
 
     @model_validator(mode="after")
     def validate_membership(self) -> Self:

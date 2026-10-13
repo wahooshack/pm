@@ -15,6 +15,8 @@ type KanbanColumnProps = {
   onMoveCard: (cardId: string, columnId: string) => void;
   columns: Column[];
   disabled: boolean;
+  editingCardId: string | null;
+  onEditingChange: (cardId: string | null) => void;
 };
 
 export const KanbanColumn = ({
@@ -22,7 +24,7 @@ export const KanbanColumn = ({
   cards,
   onRename,
   onAddCard,
-  onDeleteCard, onEditCard, onMoveCard, columns, disabled,
+  onDeleteCard, onEditCard, onMoveCard, columns, disabled, editingCardId, onEditingChange,
 }: KanbanColumnProps) => {
   const droppableId = cards.length === 0 ? `${column.id}-empty-zone` : column.id;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId, disabled });
@@ -76,6 +78,8 @@ export const KanbanColumn = ({
               columns={columns}
               columnId={column.id}
               disabled={disabled}
+              editing={editingCardId === card.id}
+              onEditingChange={onEditingChange}
             />
           ))}
         </SortableContext>

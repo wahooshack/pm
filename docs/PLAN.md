@@ -19,8 +19,8 @@ The user authorized all remediation from `review.md` on October 8, 2026. Current
 ## Verified release checks
 
 - [x] Production export, TypeScript and lint pass.
-- [x] Backend tests: 37 pass.
-- [x] Frontend unit tests: 18 pass.
+- [x] Backend tests: 39 pass.
+- [x] Frontend unit tests: 19 pass.
 - [x] Browser integration against the real API/database: 8 pass (provider mocked).
 - [x] Docker build/startup, confined static serving, authentication and copied-data migration pass.
 - [x] Board changes survive container recreation.
@@ -30,6 +30,6 @@ The user authorized all remediation from `review.md` on October 8, 2026. Current
 ## Environment-dependent follow-up
 
 - [ ] Confirm Docker Desktop can directly share the checkout's data directory; this environment required copying the test database through Docker's API.
-- [ ] Revalidate live OpenRouter connectivity when desired; previous live checks are historical and current automated validation uses mocks.
+- [x] Live OpenRouter revalidated on October 12, 2026 (see docs/REMEDIATION.md); automated tests still use mocks.
 - [ ] Run the lifecycle on a native macOS host; Linux Bash syntax and the shared Compose commands are verified.
 - [ ] User final review and restart of any existing preview with the new code.

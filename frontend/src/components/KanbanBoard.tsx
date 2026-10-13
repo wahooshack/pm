@@ -30,6 +30,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
   const [unsaved, setUnsaved] = useState<BoardData | null>(null);
   const [conflict, setConflict] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
   const busy = useRef(false);
   const expired = useRef(onSessionExpired);
@@ -62,6 +63,9 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
   const disabled = isLoading || isSaving || isAiBusy || !!unsaved || conflict;
+  // An open editor holds a copy of its card, so the assistant must not change the board underneath it.
+  const editorOpen = !!(editingCardId && board?.cards[editingCardId]);
+  const aiDisabled = disabled || editorOpen;
 
   const reportFailure = (cause: unknown, fallback: string) => {
     if (cause instanceof ApiError && cause.status === 401) expired.current?.();
@@ -126,7 +130,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
   const handleAiSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const prompt = aiPrompt.trim();
-    if (!board || !prompt || disabled || busy.current) return;
+    if (!board || !prompt || aiDisabled || busy.current) return;
     busy.current = true; setIsAiBusy(true); setError(null);
     const userMessage: ChatMessage = { id: createId("chat"), role: "user", content: prompt };
     const nextConversation = [...conversation, userMessage];
@@ -248,6 +252,8 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
                   onMoveCard={handleMoveCard}
                   columns={board.columns}
                   disabled={disabled}
+                  editingCardId={editingCardId}
+                  onEditingChange={setEditingCardId}
                 />
               ))}
             </section>
@@ -286,11 +292,14 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
               ))}
             </div>
 
+            {editorOpen && (
+              <p className="mt-4 text-sm text-[var(--gray-text)]">Save or cancel the open card edit to use the assistant.</p>
+            )}
             <form onSubmit={handleAiSubmit} className="mt-4 flex gap-2">
               <input
                 aria-label="Message to board assistant"
                 maxLength={2000}
-                disabled={disabled}
+                disabled={aiDisabled}
                 value={aiPrompt}
                 onChange={(event) => setAiPrompt(event.target.value)}
                 placeholder="Ask the board assistant..."
@@ -298,7 +307,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
               />
               <button
                 type="submit"
-                disabled={disabled}
+                disabled={aiDisabled}
                 className="rounded-2xl bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isAiBusy ? "Working..." : "Send"}

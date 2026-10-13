@@ -50,7 +50,21 @@ The user's `.env` values and original local database are preserved. A backup is 
 
 - Docker Desktop must be able to share the checkout's data directory for the production bind mount. This environment could not read the workspace bind source directly, so the legacy database was copied into the isolated test container through Docker's API. Migration and persistence passed there; direct host-file sharing still requires working Docker Desktop configuration.
 - The actual macOS lifecycle was not run. Bash syntax was checked in Linux, and the scripts call the same project-scoped Compose lifecycle verified by the Docker test.
-- Live OpenRouter availability was not revalidated. Provider requests/responses are tested with mock transports, and the browser integration mocks only the provider. The API key and selected default model are preserved.
+- Automated tests mock the provider. Live OpenRouter was revalidated manually on October 12, 2026 (below).
 - The original native virtual environment was retained/restored after its locked Uvicorn executable prevented an upgrade. Current pinned dependencies were tested in `D:/projects/pm-validation-venv`; the Docker image installs those versions cleanly. Stop native preview processes before upgrading that original environment. Restart the app to load the remediated code.
 
 The updated API requires a backend session and board revision; old unauthenticated clients and username-selected writes are intentionally unsupported. Invalid/stale writes return 422/409 without changing the authoritative board.
+
+## Code review medium findings (October 12, 2026)
+
+From `docs/code_review.md`:
+
+| Finding | Resolution |
+| --- | --- |
+| M1: one over-long AI field failed the whole batch with 502 | Board limits are defined once in `models.py`; the AI sanitizer rejects over-limit titles/details and adds beyond the card cap per action, so valid actions still commit. Tests cover a mixed batch and the card cap. |
+| M2: live AI path unverified | Measured, no code change needed (see below). |
+| M3: an open card editor could revert an AI change | Editor state is lifted to the board, one editor at a time; the assistant is disabled with an explanation while an editor is open. Unit test added. |
+
+Validation: backend 39 passed; frontend lint, TypeScript and 19 unit tests passed; production build and 8 browser tests passed; Docker image rebuilt, healthy, smoke test passed, existing board untouched.
+
+Live OpenRouter (`nvidia/nemotron-3-super-120b-a12b:free`, real key, isolated temporary database): 7 of 7 requests succeeded in 2.2-5.3 seconds, covering move, add, rename/delete, a six-action batch, long generated details, a follow-up relying on conversation history, and a read-only question (no write, revision unchanged). Every returned board matched the stored board. A direct provider call from inside the Docker container succeeded in 1.0 seconds. The 30-second timeout and 4000-token budget are adequate at these latencies.

@@ -5,14 +5,15 @@ import clsx from "clsx";
 import type { Card, Column } from "@/lib/kanban";
 
 type KanbanCardProps = {
-  card: Card; columnId: string; columns: Column[]; disabled: boolean;
+  card: Card; columnId: string; columns: Column[]; disabled: boolean; editing: boolean;
   onDelete: (id: string) => void;
   onEdit: (id: string, title: string, details: string) => void;
   onMove: (id: string, columnId: string) => void;
+  onEditingChange: (id: string | null) => void;
 };
 
-export const KanbanCard = ({ card, columnId, columns, disabled, onDelete, onEdit, onMove }: KanbanCardProps) => {
-  const [editing, setEditing] = useState(false);
+export const KanbanCard = ({ card, columnId, columns, disabled, editing, onDelete, onEdit, onMove, onEditingChange }: KanbanCardProps) => {
+  const setEditing = (open: boolean) => onEditingChange(open ? card.id : null);
   const titleInput = useRef<HTMLInputElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (editing) titleInput.current?.focus(); }, [editing]);

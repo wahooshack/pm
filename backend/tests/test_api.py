@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from unittest.mock import AsyncMock
 
@@ -145,6 +146,20 @@ def test_ai_commits_authoritative_board(signed_in, monkeypatch):
     assert "card-1" in board["columns"][4]["cardIds"]
     assert signed_in.get("/api/board").json() == board
     assert signed_in.post("/api/ai", json={"prompt": "hi", "revision": 0}).status_code == 409
+
+
+def test_ai_over_limit_action_is_rejected_without_losing_valid_actions(signed_in, monkeypatch):
+    actions = [{"type": "move_card", "cardId": "card-1", "columnId": "col-done"},
+               {"type": "rename_card", "cardId": "card-2", "title": "x" * 201},
+               {"type": "update_card_details", "cardId": "card-3", "details": "x" * 5001},
+               {"type": "add_card", "columnId": "col-done", "title": "x" * 201}]
+    monkeypatch.setattr(main, "call_openrouter", AsyncMock(return_value={"model": "mock", "content":
+        json.dumps({"message": "Done.", "actions": actions})}))
+    response = signed_in.post("/api/ai", json={"prompt": "Update cards", "revision": 0})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["actions"] == actions[:1] and len(body["rejectedActions"]) == 3
+    assert "card-1" in signed_in.get("/api/board").json()["columns"][4]["cardIds"]
 
 
 @pytest.mark.parametrize("payload", [

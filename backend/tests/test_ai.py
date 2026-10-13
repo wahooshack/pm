@@ -191,6 +191,17 @@ def test_all_supported_actions_and_empty_details():
     assert board["cards"]["card-1"]["details"] == "Test"
 
 
+def test_add_card_is_rejected_at_the_card_limit():
+    from backend.app.ai import apply_board_actions
+    from backend.app.models import MAX_CARDS
+    board = make_board()
+    board["cards"] = {f"c{i}": {"id": f"c{i}", "title": "T", "details": ""} for i in range(MAX_CARDS)}
+    board["columns"][0]["cardIds"] = list(board["cards"])
+    applied, rejected = [], []
+    apply_board_actions(board, [{"type": "add_card", "columnId": "col-done", "title": "One more"}], applied, rejected)
+    assert applied == [] and len(rejected) == 1
+
+
 @pytest.mark.parametrize("response", [None, {}, {"choices": []}, {"choices": [None]},
     {"choices": [{"message": {"content": None}}]}])
 def test_provider_invalid_shapes_are_rejected(monkeypatch, response):

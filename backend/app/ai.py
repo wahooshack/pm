@@ -8,6 +8,8 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 
+from .models import MAX_CARDS, MAX_DETAILS, MAX_TITLE
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -55,6 +57,9 @@ def _sanitize_action(action: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     if any(not isinstance(value, str) for value in action.values()):
+        return None
+    # Reject over-limit fields per action so the rest of the batch still commits.
+    if len(action.get("title", "").strip()) > MAX_TITLE or len(action.get("details", "")) > MAX_DETAILS:
         return None
     action_type = str(action.get("type") or "").strip()
     if not action_type:
@@ -164,6 +169,8 @@ def _apply_add_card(board: dict[str, Any], column_id: str, title: str, details: 
 
     target_column = next((column for column in columns if isinstance(column, dict) and column.get("id") == column_id), None)
     if target_column is None or not isinstance(target_column.get("cardIds", []), list):
+        return False
+    if len(board.get("cards", {})) >= MAX_CARDS:
         return False
 
     new_id = f"card-{len(board.get('cards', {})) + 1}"
