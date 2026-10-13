@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { initialData } from "../src/lib/kanban";
+import { initialData } from "../src/test/fixtures";
 
 const signIn = async (page: Page) => {
   await page.goto("/");
@@ -70,6 +70,7 @@ test("adds, edits, cancels, clears details, and deletes with SQLite persistence"
   await expect(page.getByText("Edited browser card", { exact: true })).toBeVisible();
   const board = await (await page.request.get("/api/board")).json();
   expect(Object.values(board.cards).find((c) => (c as {title: string}).title === "Edited browser card")).toMatchObject({ details: "" });
+  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "Delete Edited browser card" }).click(); await waitSaved(page);
   await page.reload(); await expect(page.getByText("Edited browser card", { exact: true })).toHaveCount(0);
 });
@@ -84,6 +85,18 @@ test("moves a card with pointer drag and persists it", async ({ page }) => {
   await page.mouse.down(); await page.mouse.move(to.x + to.width / 2, to.y + 80, { steps: 15 }); await page.mouse.up();
   await expect(target.getByTestId("card-card-1")).toBeVisible(); await waitSaved(page);
   await page.reload(); await expect(page.getByTestId("column-col-review").getByTestId("card-card-1")).toBeVisible();
+});
+
+test("drops a card above the last card of another column", async ({ page }) => {
+  await signIn(page);
+  const handle = page.getByRole("button", { name: "Drag Align roadmap themes", exact: true });
+  const from = await handle.boundingBox(); const to = await page.getByTestId("card-card-6").boundingBox();
+  if (!from || !to) throw new Error("Missing drag coordinates");
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down(); await page.mouse.move(to.x + to.width / 2, to.y + 10, { steps: 15 }); await page.mouse.up();
+  await waitSaved(page);
+  const board = await (await page.request.get("/api/board")).json();
+  expect(board.columns[3].cardIds).toEqual(["card-1", "card-6"]);
 });
 
 test("moves into an empty column using keyboard controls", async ({ page }) => {

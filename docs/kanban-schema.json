@@ -215,7 +215,8 @@
       ],
       "notes": [
         "Cards are tracked by column_id and position so drag-and-drop ordering is preserved without storing a separate movement log.",
-        "The details field replaces the current per-card metadata pattern used in the frontend demo."
+        "The details field replaces the current per-card metadata pattern used in the frontend demo.",
+        "created_at/updated_at are reset by each board save (rows are replaced); they are not per-card history."
       ],
       "primary_key": [
         "board_id",

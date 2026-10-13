@@ -1,6 +1,6 @@
 # Review remediation
 
-The user authorized all recommended changes from `review.md` on October 8, 2026. The original report remains a historical record of revision `074dcd0`.
+The user authorized all recommended changes from `docs/review.md` on October 8, 2026. The original report remains a historical record of revision `074dcd0`.
 
 ## Implemented
 
@@ -68,3 +68,23 @@ From `docs/code_review.md`:
 Validation: backend 39 passed; frontend lint, TypeScript and 19 unit tests passed; production build and 8 browser tests passed; Docker image rebuilt, healthy, smoke test passed, existing board untouched.
 
 Live OpenRouter (`nvidia/nemotron-3-super-120b-a12b:free`, real key, isolated temporary database): 7 of 7 requests succeeded in 2.2-5.3 seconds, covering move, add, rename/delete, a six-action batch, long generated details, a follow-up relying on conversation history, and a read-only question (no write, revision unchanged). Every returned board matched the stored board. A direct provider call from inside the Docker container succeeded in 1.0 seconds. The 30-second timeout and 4000-token budget are adequate at these latencies.
+
+## Code review low findings (October 12, 2026)
+
+| Finding | Resolution |
+| --- | --- |
+| L1: card timestamps reset by every save | Documented in `docs/DATABASE.md` and the schema; nothing reads them, so the save path is unchanged. |
+| L2: missing API key looked like an outage | The provider wrapper raises a dedicated error; the API returns 503 naming `OPENROUTER_API_KEY`, and provider failures are logged with their message. Tested. |
+| L3: a click during a blur-triggered rename is ignored | Accepted for the MVP. The rename save takes milliseconds locally, and queuing actions would add complexity the standards rule out. |
+| L4: blocking SQLite on the event loop | Database calls in the AI route run in the threadpool. |
+| L5: every read took a write lock | Reads and writes look up the board with a plain query in their own transaction; seeding happens only at startup and sign-in. |
+| L6: redundant defensive code in `ai.py` | Removed checks already guaranteed by the Pydantic models, the unused no-board branch and duplicate prompt checks; AI card IDs are random like the frontend's. Model output is still fully sanitized. |
+| L7: dead and duplicated code | Removed `backend/static/index.html` and unused credential exports; the seed board moved to `frontend/src/test/fixtures.ts`. |
+| L8: test gaps | Tests run with `OPENROUTER_API_KEY` removed (autouse fixture); the supported-actions test now verifies clearing details on the edited card. |
+| L9: unpinned uv, root container | uv is copied from the pinned `ghcr.io/astral-sh/uv:0.13.0` image. The container still runs as root: on Linux a non-root user cannot write a bind-mounted data directory created by root unless UIDs match, and that could not be verified on this Windows host. |
+| L10: misleading Docker message | Start scripts say docker was not found on PATH. |
+| L11: one-click irreversible delete | Removal asks for confirmation. Unit and browser tests cover it. |
+| L12: no drop position above another column's last card | Drops onto a card in another column go before or after it based on the drop position. Unit and browser tests added. |
+| L13: structure and accessibility | `review.md` moved to `docs/`; card titles are `h3`; `AGENTS.md` notes the darker supporting-text gray. |
+
+Validation: backend 40 passed; frontend lint, TypeScript and 20 unit tests passed; production build and 9 browser tests passed; Docker image rebuilt with pinned uv, healthy, smoke test passed, existing board untouched. Live OpenRouter: 7 of 7 scenarios succeeded in 1.5-8.1 seconds against the simplified `ai.py`, and a provider call from inside the container succeeded.

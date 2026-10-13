@@ -87,5 +87,3 @@ export const LoginForm = ({ onSubmit }: LoginFormProps) => {
     </main>
   );
 };
-
-export { VALID_PASSWORD, VALID_USERNAME };

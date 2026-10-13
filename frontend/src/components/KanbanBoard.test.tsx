@@ -2,7 +2,8 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import Home from "@/app/page";
-import { initialData, type BoardData } from "@/lib/kanban";
+import type { BoardData } from "@/lib/kanban";
+import { initialData } from "@/test/fixtures";
 
 const response = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body } as Response);
 const deferred = <T,>() => {
@@ -17,6 +18,7 @@ let posts: number;
 beforeEach(() => {
   board = structuredClone(initialData); signedIn = false; posts = 0;
   window.sessionStorage.clear();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
   global.fetch = vi.fn(async (input, init) => {
     const path = String(input);
     if (path === "/api/session") return signedIn ? response({ username: "user" }) : response({ detail: "Please sign in." }, 401);
@@ -65,6 +67,14 @@ it("adds, edits, clears details, and deletes a card without AI", async () => {
   expect(Object.values(board.cards).find(c => c.title === "Edited card")?.details).toBe("");
   await userEvent.click(screen.getByRole("button", { name: "Delete Edited card" })); await saved();
   expect(screen.queryByText("Edited card")).not.toBeInTheDocument();
+});
+
+it("keeps a card when removal is not confirmed", async () => {
+  vi.mocked(window.confirm).mockReturnValue(false);
+  render(<KanbanBoard />); await loaded();
+  await userEvent.click(screen.getByRole("button", { name: "Delete Align roadmap themes" }));
+  expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("Align roadmap themes"));
+  expect(posts).toBe(0); expect(screen.getByText("Align roadmap themes")).toBeInTheDocument();
 });
 
 it("cancels card edits without saving", async () => {

@@ -99,8 +99,12 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveCardId(null);
-    if (!board || disabled || busy.current || !event.over || event.active.id === event.over.id) return;
-    void saveBoard({ ...board, columns: moveCard(board.columns, String(event.active.id), String(event.over.id)) }, `drag-${event.active.id}`);
+    const { active, over } = event;
+    if (!board || disabled || busy.current || !over || active.id === over.id) return;
+    // Dropped below the middle of the target card means "place after it".
+    const dragged = active.rect.current.translated;
+    const placeAfter = !!dragged && dragged.top + dragged.height / 2 > over.rect.top + over.rect.height / 2;
+    void saveBoard({ ...board, columns: moveCard(board.columns, String(active.id), String(over.id), placeAfter) }, `drag-${active.id}`);
   };
   const handleRenameColumn = (id: string, title: string) => {
     if (!board || disabled || busy.current) return;

@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $rootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    throw "Docker with Compose is required. Start Docker Desktop and retry."
+    throw "docker was not found on PATH. Install Docker Desktop (with Compose) and make sure docker is on PATH, then retry."
 }
 if (-not (Test-Path -LiteralPath (Join-Path $rootDir ".env"))) {
     Copy-Item -LiteralPath (Join-Path $rootDir ".env.example") -Destination (Join-Path $rootDir ".env")

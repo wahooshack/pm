@@ -98,6 +98,7 @@ def test_invalid_board_never_changes_database(signed_in, mutation):
 
 def test_multiple_users_share_public_ids_without_collisions(signed_in):
     first = database.load_board_for_user("user")
+    database.ensure_seed_board("second")
     second = database.load_board_for_user("second")
     assert second == first
     second["cards"]["card-1"]["title"] = "Second user's card"
@@ -186,6 +187,13 @@ def test_ai_errors_are_controlled(signed_in, monkeypatch, error, status):
     assert signed_in.get("/api/board").json()["revision"] == 0
 
 
+def test_ai_without_api_key_reports_configuration(signed_in):
+    # conftest removes OPENROUTER_API_KEY, so the real provider wrapper must refuse before any request.
+    response = signed_in.post("/api/ai", json={"prompt": "hi", "revision": 0})
+    assert response.status_code == 503
+    assert "OPENROUTER_API_KEY" in response.json()["detail"]
+
+
 def test_ai_cannot_commit_after_intervening_write_or_logout(signed_in, monkeypatch):
     async def intervening_write(prompt, model=None):
         board = database.load_board_for_user("user")
@@ -226,6 +234,7 @@ def test_legacy_migration_preserves_data_and_is_repeatable(tmp_path, monkeypatch
     assert before["cards"]["card-1"]["title"] == "Existing custom title"
     database.init_db()
     assert database.load_board_for_user("user") == before
+    database.ensure_seed_board("second")
     assert len(database.load_board_for_user("second")["cards"]) == 8
     with database.get_connection() as connection:
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []

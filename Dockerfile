@@ -9,14 +9,15 @@ RUN npm run build
 
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /bin/uv
+
 WORKDIR /app
 
 COPY backend/requirements.txt ./backend/requirements.txt
+RUN uv pip install --system --no-cache --requirement ./backend/requirements.txt
+
 COPY backend/app ./backend/app
 COPY --from=frontend-builder /app/frontend/out ./frontend/out
-
-RUN pip install --no-cache-dir --upgrade pip uv && \
-    uv pip install --system --requirement ./backend/requirements.txt
 
 EXPOSE 8000
 

@@ -38,7 +38,7 @@ FastAPI serves the Next.js static export and protected JSON API. The demo accoun
 - Blue Primary: `#209dd7` - links, key sections
 - Purple Secondary: `#753991` - submit buttons, important actions
 - Dark Navy: `#032147` - main headings
-- Gray Text: `#888888` - supporting text, labels
+- Gray Text: `#888888` - labels; supporting text on light surfaces uses `#656565` for readable contrast
 
 ## Coding standards
 

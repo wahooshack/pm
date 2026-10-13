@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import uuid
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -16,19 +17,13 @@ load_dotenv(PROJECT_ROOT / ".env")
 DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 
 
-def build_board_prompt(board: dict[str, Any], user_prompt: str, conversation: list[dict[str, Any]] | None = None) -> str:
-    conversation_lines = []
-    if conversation:
-        for entry in conversation:
-            if not isinstance(entry, dict):
-                continue
-            role = entry.get("role", "user")
-            content = entry.get("content", "")
-            if isinstance(content, str):
-                conversation_lines.append(f"{role}: {content}")
+class AssistantNotConfigured(Exception):
+    pass
 
+
+def build_board_prompt(board: dict[str, Any], user_prompt: str, conversation: list[dict[str, Any]]) -> str:
+    history = "\n".join(f"{entry['role']}: {entry['content']}" for entry in conversation) or "No prior conversation."
     board_json = json.dumps(board, ensure_ascii=False, indent=2)
-    history = "\n".join(conversation_lines) if conversation_lines else "No prior conversation."
     return (
         "You are a Kanban assistant for a project management app. "
         "Respond with valid JSON only. "
@@ -52,166 +47,96 @@ def build_board_prompt(board: dict[str, Any], user_prompt: str, conversation: li
     )
 
 
-def _sanitize_action(action: dict[str, Any]) -> dict[str, Any] | None:
-    if not isinstance(action, dict):
-        return None
-
-    if any(not isinstance(value, str) for value in action.values()):
+def _sanitize_action(action: Any) -> dict[str, Any] | None:
+    """Model output is untrusted: accept only well-formed actions within the board limits."""
+    if not isinstance(action, dict) or any(not isinstance(value, str) for value in action.values()):
         return None
     # Reject over-limit fields per action so the rest of the batch still commits.
     if len(action.get("title", "").strip()) > MAX_TITLE or len(action.get("details", "")) > MAX_DETAILS:
         return None
-    action_type = str(action.get("type") or "").strip()
-    if not action_type:
-        return None
+    action_type = action.get("type", "").strip()
+    card_id = action.get("cardId") or action.get("card_id") or ""
+    column_id = action.get("columnId") or action.get("column_id") or ""
+    title = action.get("title", "").strip()
 
-    if action_type == "move_card":
-        card_id = str(action.get("cardId") or action.get("card_id") or "")
-        column_id = str(action.get("columnId") or action.get("column_id") or "")
-        if card_id and column_id:
-            return {"type": "move_card", "cardId": card_id, "columnId": column_id}
-        return None
-
-    if action_type in {"rename_card", "update_card_details"}:
-        card_id = str(action.get("cardId") or action.get("card_id") or "")
-        if not card_id:
-            return None
-        payload: dict[str, Any] = {"type": action_type, "cardId": card_id}
+    if action_type == "move_card" and card_id and column_id:
+        return {"type": "move_card", "cardId": card_id, "columnId": column_id}
+    if action_type in {"rename_card", "update_card_details"} and card_id:
+        payload = {"type": action_type, "cardId": card_id}
         if "title" in action:
-            payload["title"] = str(action.get("title") or "")
+            payload["title"] = action["title"]
         if "details" in action:
-            payload["details"] = str(action.get("details") or "")
-        if action_type == "rename_card" and not payload.get("title", "").strip():
+            payload["details"] = action["details"]
+        if action_type == "rename_card" and not title:
             return None
         if action_type == "update_card_details" and "details" not in payload:
             return None
         return payload
-
-    if action_type == "add_card":
-        column_id = str(action.get("columnId") or action.get("column_id") or "")
-        title = str(action.get("title") or "").strip()
-        if not column_id or not title:
-            return None
+    if action_type == "add_card" and column_id and title:
         payload = {"type": "add_card", "columnId": column_id, "title": title}
         if "details" in action:
             payload["details"] = action["details"]
         return payload
-
-    if action_type == "delete_card":
-        card_id = str(action.get("cardId") or action.get("card_id") or "")
-        if card_id:
-            return {"type": "delete_card", "cardId": card_id}
-        return None
-
-    if action_type == "rename_column":
-        column_id = str(action.get("columnId") or action.get("column_id") or "")
-        title = str(action.get("title") or "").strip()
-        if column_id and title:
-            return {"type": "rename_column", "columnId": column_id, "title": title}
-        return None
-
+    if action_type == "delete_card" and card_id:
+        return {"type": "delete_card", "cardId": card_id}
+    if action_type == "rename_column" and column_id and title:
+        return {"type": "rename_column", "columnId": column_id, "title": title}
     return None
 
 
+def _find_column(board: dict[str, Any], column_id: str) -> dict[str, Any] | None:
+    return next((column for column in board["columns"] if column["id"] == column_id), None)
+
+
 def _apply_move_card(board: dict[str, Any], card_id: str, column_id: str) -> bool:
-    cards = board.get("cards", {})
-    columns = board.get("columns", [])
-    if not isinstance(cards, dict) or not isinstance(columns, list):
+    target = _find_column(board, column_id)
+    if card_id not in board["cards"] or target is None:
         return False
-    if card_id not in cards:
-        return False
-
-    current_column_id = None
-    for column in columns:
-        if not isinstance(column, dict):
-            continue
-        card_ids = column.get("cardIds", [])
-        if isinstance(card_ids, list) and card_id in card_ids:
-            current_column_id = column.get("id")
-            break
-
-    target_column = next((column for column in columns if isinstance(column, dict) and column.get("id") == column_id), None)
-    if not target_column or not isinstance(target_column.get("cardIds", []), list):
-        return False
-
-    if current_column_id == column_id:
-        return True
-
-    for column in columns:
-        if not isinstance(column, dict):
-            continue
-        card_ids = column.get("cardIds", [])
-        if isinstance(card_ids, list):
-            column["cardIds"] = [existing_id for existing_id in card_ids if existing_id != card_id]
-
-    target_column["cardIds"].append(card_id)
+    if card_id not in target["cardIds"]:
+        for column in board["columns"]:
+            column["cardIds"] = [existing for existing in column["cardIds"] if existing != card_id]
+        target["cardIds"].append(card_id)
     return True
 
 
-def _apply_rename_card(board: dict[str, Any], card_id: str, title: str | None = None, details: str | None = None) -> bool:
-    cards = board.get("cards", {})
-    if not isinstance(cards, dict) or card_id not in cards:
-        return False
-    card = cards[card_id]
-    if not isinstance(card, dict):
+def _apply_rename_card(board: dict[str, Any], card_id: str, title: str | None, details: str | None) -> bool:
+    card = board["cards"].get(card_id)
+    if card is None:
         return False
     if title is not None:
-        card["title"] = str(title).strip() or card["title"]
+        card["title"] = title.strip() or card["title"]
     if details is not None:
-        card["details"] = str(details).strip()
+        card["details"] = details.strip()
     return True
 
 
-def _apply_add_card(board: dict[str, Any], column_id: str, title: str, details: str | None = None) -> bool:
-    columns = board.get("columns", [])
-    if not isinstance(columns, list):
+def _apply_add_card(board: dict[str, Any], column_id: str, title: str, details: str | None) -> bool:
+    target = _find_column(board, column_id)
+    if target is None or len(board["cards"]) >= MAX_CARDS:
         return False
-
-    target_column = next((column for column in columns if isinstance(column, dict) and column.get("id") == column_id), None)
-    if target_column is None or not isinstance(target_column.get("cardIds", []), list):
-        return False
-    if len(board.get("cards", {})) >= MAX_CARDS:
-        return False
-
-    new_id = f"card-{len(board.get('cards', {})) + 1}"
-    while new_id in board.get("cards", {}):
-        new_id = f"{new_id}-copy"
-
-    card = {"id": new_id, "title": str(title).strip(), "details": "No details yet." if details is None else str(details)}
-    board.setdefault("cards", {})[new_id] = card
-    target_column.setdefault("cardIds", []).append(new_id)
+    card_id = f"card-{uuid.uuid4().hex[:12]}"
+    board["cards"][card_id] = {"id": card_id, "title": title, "details": "No details yet." if details is None else details}
+    target["cardIds"].append(card_id)
     return True
 
 
 def _apply_delete_card(board: dict[str, Any], card_id: str) -> bool:
-    cards = board.get("cards", {})
-    if not isinstance(cards, dict) or card_id not in cards:
+    if board["cards"].pop(card_id, None) is None:
         return False
-    del cards[card_id]
-
-    for column in board.get("columns", []):
-        if not isinstance(column, dict):
-            continue
-        card_ids = column.get("cardIds", [])
-        if isinstance(card_ids, list):
-            column["cardIds"] = [existing_id for existing_id in card_ids if existing_id != card_id]
+    for column in board["columns"]:
+        column["cardIds"] = [existing for existing in column["cardIds"] if existing != card_id]
     return True
 
 
 def _apply_rename_column(board: dict[str, Any], column_id: str, title: str) -> bool:
-    columns = board.get("columns", [])
-    if not isinstance(columns, list):
+    column = _find_column(board, column_id)
+    if column is None:
         return False
-
-    for column in columns:
-        if isinstance(column, dict) and column.get("id") == column_id:
-            column["title"] = str(title).strip() or column.get("title", "")
-            return True
-    return False
+    column["title"] = title
+    return True
 
 
-def apply_board_actions(board: dict[str, Any], actions: list[Any],
-                        applied: list | None = None, rejected: list | None = None) -> dict[str, Any]:
+def apply_board_actions(board: dict[str, Any], actions: list[Any], applied: list, rejected: list) -> dict[str, Any]:
     next_board = deepcopy(board)
     for action in actions:
         sanitized = _sanitize_action(action)
@@ -228,10 +153,7 @@ def apply_board_actions(board: dict[str, Any], actions: list[Any],
                 success = _apply_delete_card(next_board, sanitized["cardId"])
             elif action_type == "rename_column":
                 success = _apply_rename_column(next_board, sanitized["columnId"], sanitized["title"])
-        if success and applied is not None:
-            applied.append(sanitized)
-        elif not success and rejected is not None:
-            rejected.append(action)
+        (applied if success else rejected).append(sanitized if success else action)
     return next_board
 
 
@@ -243,7 +165,7 @@ def parse_structured_ai_response(raw_text: str) -> dict[str, Any]:
             text = fenced.group(1)
     try:
         payload = json.loads(text)
-    except (json.JSONDecodeError, TypeError) as exc:
+    except json.JSONDecodeError as exc:
         raise RuntimeError("Assistant returned invalid JSON.") from exc
     if (not isinstance(payload, dict) or not isinstance(payload.get("message"), str)
             or len(payload["message"]) > 5000 or not isinstance(payload.get("actions"), list)
@@ -252,24 +174,9 @@ def parse_structured_ai_response(raw_text: str) -> dict[str, Any]:
     return payload
 
 
-async def generate_board_ai_response(
-    prompt: str,
-    board: dict[str, Any] | None = None,
-    conversation: list[dict[str, Any]] | None = None,
-    model: str | None = None,
-    openrouter_client: Any | None = None,
-) -> dict[str, Any]:
-    if not prompt or not prompt.strip():
-        raise ValueError("Prompt cannot be empty.")
-
-    client = openrouter_client or call_openrouter
-
-    if board is None:
-        response = await client(prompt, model=model)
-        return {"message": response["content"], "model": response["model"], "board": None, "actions": []}
-
-    structured_prompt = build_board_prompt(board, prompt, conversation)
-    response = await client(structured_prompt, model=model)
+async def generate_board_ai_response(prompt: str, board: dict[str, Any], openrouter_client,
+                                     conversation: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    response = await openrouter_client(build_board_prompt(board, prompt, conversation or []))
     parsed = parse_structured_ai_response(response["content"])
     applied, rejected = [], []
     next_board = apply_board_actions(board, parsed["actions"], applied, rejected)
@@ -286,12 +193,9 @@ async def generate_board_ai_response(
 
 
 async def call_openrouter(prompt: str, model: str | None = None) -> dict[str, Any]:
-    if not prompt or not prompt.strip():
-        raise ValueError("Prompt cannot be empty.")
-
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
-        raise ValueError("OPENROUTER_API_KEY is not configured.")
+        raise AssistantNotConfigured("OPENROUTER_API_KEY is not configured.")
 
     selected_model = model or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL)
     headers = {

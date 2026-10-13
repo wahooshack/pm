@@ -2,11 +2,11 @@
 
 Reviewed on October 12, 2026. Revision: `b82d5a2` (`main`, in sync with `origin/main`). No application code or configuration was changed; this report is the only repository change.
 
-> Status: M1-M3 were resolved on October 12, 2026, including a live OpenRouter check; see `docs/REMEDIATION.md`. Low findings remain open.
+> Status: all findings were addressed on October 12, 2026 (L3 accepted as an MVP limitation; L9 non-root user deferred). Live OpenRouter was rechecked. See `docs/REMEDIATION.md`.
 
 ## Summary
 
-The application is in good shape. The October 8 remediation (`review.md`, `docs/REMEDIATION.md`) holds up: authentication, static-file confinement, revision-checked writes, strict board validation and server-side AI commits are all correctly implemented and covered by tests. No critical or high-severity defects were found.
+The application is in good shape. The October 8 remediation (`docs/review.md`, `docs/REMEDIATION.md`) holds up: authentication, static-file confinement, revision-checked writes, strict board validation and server-side AI commits are all correctly implemented and covered by tests. No critical or high-severity defects were found.
 
 The remaining issues are concentrated in the AI path (one malformed field discards a whole valid batch with a misleading error, and the live provider path is still unverified), one in-tab lost-update case in the card editor, and a set of low-severity simplification, hygiene and test-quality items. Several of the low items are cases where the code is more defensive or more duplicated than the project's own "keep it simple" standard asks for.
 

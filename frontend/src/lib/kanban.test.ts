@@ -11,10 +11,12 @@ describe("moveCard", () => {
     expect(result[0].cardIds).toEqual(["card-2", "card-1"]);
   });
 
-  it("moves a card to the end of a target column when dropped on its last card", () => {
-    const result = moveCard(baseColumns, "card-2", "card-3");
-    expect(result[0].cardIds).toEqual(["card-1"]);
-    expect(result[1].cardIds).toEqual(["card-3", "card-2"]);
+  it("places a card before or after a card in another column", () => {
+    const before = moveCard(baseColumns, "card-2", "card-3");
+    expect(before[0].cardIds).toEqual(["card-1"]);
+    expect(before[1].cardIds).toEqual(["card-2", "card-3"]);
+    const after = moveCard(baseColumns, "card-2", "card-3", true);
+    expect(after[1].cardIds).toEqual(["card-3", "card-2"]);
   });
 
   it("drops cards to the end of a column", () => {

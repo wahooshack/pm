@@ -181,14 +181,16 @@ def test_all_supported_actions_and_empty_details():
         {"type": "rename_column", "columnId": "col-done", "title": "Finished"},
         {"type": "add_card", "columnId": "col-done", "title": "New", "details": ""},
         {"type": "move_card", "cardId": "card-1", "columnId": "col-done"},
-        {"type": "delete_card", "cardId": "card-1"},
     ]
     applied, rejected = [], []
     changed = apply_board_actions(board, actions, applied, rejected)
-    assert len(applied) == 6 and rejected == []
-    assert changed["columns"][1]["title"] == "Finished"
-    assert list(changed["cards"].values())[0]["details"] == ""
+    assert len(applied) == 5 and rejected == []
+    assert changed["cards"]["card-1"] == {"id": "card-1", "title": "Renamed", "details": ""}
+    assert changed["columns"][1] == {"id": "col-done", "title": "Finished", "cardIds": [changed["columns"][1]["cardIds"][0], "card-1"]}
+    assert changed["cards"][changed["columns"][1]["cardIds"][0]]["title"] == "New"
     assert board["cards"]["card-1"]["details"] == "Test"
+    deleted = apply_board_actions(changed, [{"type": "delete_card", "cardId": "card-1"}], applied, rejected)
+    assert "card-1" not in deleted["cards"] and "card-1" not in deleted["columns"][1]["cardIds"]
 
 
 def test_add_card_is_rejected_at_the_card_limit():

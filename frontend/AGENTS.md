@@ -4,10 +4,10 @@ Next.js/React/TypeScript with dnd-kit. Production uses static export served by F
 
 - `src/app/page.tsx`: restores the backend session, authenticates login, revokes logout.
 - `src/lib/api.ts`: same-origin JSON API calls and controlled errors.
-- `src/lib/kanban.ts`: board types (including revision), seed fixture, movement helpers.
+- `src/lib/kanban.ts`: board types (including revision) and movement helpers; the seed board for tests is in `src/test/fixtures.ts`.
 - `src/components/KanbanBoard.tsx`: authoritative loading, one in-flight mutation, explicit retry/reload, server-committed AI results.
 - `KanbanColumn.tsx`: fixed columns; rename on blur/Enter, Escape to cancel.
-- `KanbanCard.tsx`: card editor, drag handle, keyboard-accessible movement and removal.
+- `KanbanCard.tsx`: card editor (one open at a time; the assistant is disabled while it is open), drag handle, keyboard-accessible movement and confirmed removal.
 - `tests/`: real exported-frontend/FastAPI/SQLite integration, with only the provider mocked.
 
 Never treat browser storage as authorization. Do not render writable seed data during loading/failure, send stale full-board snapshots without revisions, or POST an AI replacement from the client. Abort pending requests on unmount. Preserve the palette, readable text, explicit control labels, and keyboard operation.

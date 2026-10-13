@@ -1,9 +1,10 @@
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
+from pathlib import Path
 
 from .models import Board
-from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = PROJECT_ROOT / "backend" / "data" / "pm.db"
@@ -144,20 +145,24 @@ def _read_board(connection, board_id: int) -> dict:
                       for card in cards}}
 
 
+def _find_board(connection, username: str) -> sqlite3.Row:
+    # Boards are seeded at startup and sign-in, so reads and writes never need a seeding lock.
+    return connection.execute("""SELECT boards.id, boards.user_id FROM boards
+        JOIN users ON users.id = boards.user_id WHERE users.username = ?""", (username,)).fetchone()
+
+
 def load_board_for_user(username: str) -> dict:
-    board = ensure_seed_board(username)
     with get_connection() as connection:
         connection.execute("BEGIN")
-        return _read_board(connection, board["id"])
+        return _read_board(connection, _find_board(connection, username)["id"])
 
 
 def save_board_for_user(username: str, board_data: dict, session_hash: str | None = None) -> dict:
     board_data = Board.model_validate(board_data).model_dump()
-    board = ensure_seed_board(username)
     with get_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        board = _find_board(connection, username)
         if session_hash is not None:
-            import time
             session = connection.execute("SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?",
                                          (session_hash, int(time.time()))).fetchone()
             if session is None or session["user_id"] != board["user_id"]:

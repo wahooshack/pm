@@ -1,6 +1,6 @@
 # Project plan
 
-The user authorized all remediation from `review.md` on October 8, 2026. Current implementation and verification are recorded in `docs/REMEDIATION.md`; the review describes the original revision.
+The user authorized all remediation from `docs/review.md` on October 8, 2026. Current implementation and verification are recorded in `docs/REMEDIATION.md`; the review describes the original revision.
 
 ## Completed implementation
 
@@ -19,9 +19,9 @@ The user authorized all remediation from `review.md` on October 8, 2026. Current
 ## Verified release checks
 
 - [x] Production export, TypeScript and lint pass.
-- [x] Backend tests: 39 pass.
-- [x] Frontend unit tests: 19 pass.
-- [x] Browser integration against the real API/database: 8 pass (provider mocked).
+- [x] Backend tests: 40 pass.
+- [x] Frontend unit tests: 20 pass.
+- [x] Browser integration against the real API/database: 9 pass (provider mocked).
 - [x] Docker build/startup, confined static serving, authentication and copied-data migration pass.
 - [x] Board changes survive container recreation.
 - [x] Frontend audit reports zero vulnerabilities.

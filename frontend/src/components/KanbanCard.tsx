@@ -29,7 +29,7 @@ export const KanbanCard = ({ card, columnId, columns, disabled, editing, onDelet
       <div className="flex justify-between gap-2">
         <button id={`drag-${card.id}`} ref={setActivatorNodeRef} type="button" disabled={disabled || editing}
           {...attributes} {...listeners} aria-label={`Drag ${card.title}`} className="cursor-grab rounded px-2 py-1 text-xs">Drag</button>
-        <button type="button" disabled={disabled} onClick={() => onDelete(card.id)} aria-label={`Delete ${card.title}`} className="rounded px-2 py-1 text-xs">Remove</button>
+        <button type="button" disabled={disabled} onClick={() => { if (window.confirm(`Delete "${card.title}"? This cannot be undone.`)) onDelete(card.id); }} aria-label={`Delete ${card.title}`} className="rounded px-2 py-1 text-xs">Remove</button>
       </div>
       {editing ? (
         <form onSubmit={event => {
@@ -45,7 +45,7 @@ export const KanbanCard = ({ card, columnId, columns, disabled, editing, onDelet
         </form>
       ) : (
         <>
-          <h4 className="mt-2 font-display text-base font-semibold text-[var(--navy-dark)]">{card.title}</h4>
+          <h3 className="mt-2 font-display text-base font-semibold text-[var(--navy-dark)]">{card.title}</h3>
           <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">{card.details}</p>
           <button id={`edit-${card.id}`} ref={editButton} type="button" disabled={disabled} aria-label={`Edit ${card.title}`} onClick={() => {
             setTitle(card.title); setDetails(card.details); setEditing(true);
