@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 export default function Home() {
   const [status, setStatus] = useState<"checking" | "signed-in" | "signed-out" | "signing-out">("checking");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -26,6 +27,7 @@ export default function Home() {
   const handleLogin = async (username: string, password: string) => {
     await api("/api/login", { username, password });
     setError(null);
+    setNotice(null);
     setStatus("signed-in");
   };
 
@@ -46,7 +48,8 @@ export default function Home() {
     return <p role="status" className="p-8">{status === "checking" ? "Checking session..." : "Signing out..."}</p>;
   }
   if (status === "signed-out") {
-    return <>{error && <div role="alert" className="p-4">{error} <button onClick={() => void handleLogout()}>Retry sign out</button></div>}<LoginForm onSubmit={handleLogin} /></>;
+    return <>{error && <div role="alert" className="p-4">{error} <button onClick={() => void handleLogout()}>Retry sign out</button></div>}<LoginForm onSubmit={handleLogin} notice={notice} /></>;
   }
-  return <KanbanBoard onLogout={() => void handleLogout()} onSessionExpired={() => setStatus("signed-out")} />;
+  return <KanbanBoard onLogout={() => void handleLogout()}
+    onSessionExpired={(message) => { setNotice(message); setStatus("signed-out"); }} />;
 }

@@ -163,6 +163,24 @@ def test_ai_over_limit_action_is_rejected_without_losing_valid_actions(signed_in
     assert "card-1" in signed_in.get("/api/board").json()["columns"][4]["cardIds"]
 
 
+def test_ai_cannot_commit_a_board_too_large_to_save_manually(signed_in, monkeypatch):
+    # Multi-byte details: the cap is in bytes while the model limits count characters.
+    monkeypatch.setattr(main, "MAX_BODY_BYTES", main.board_body_bytes(signed_in.get("/api/board").json()) + 400)
+    add = lambda details: AsyncMock(return_value={"model": "mock", "content": json.dumps(
+        {"message": "Added.", "actions": [{"type": "add_card", "columnId": "col-done", "title": "Big", "details": details}]})})
+    monkeypatch.setattr(main, "call_openrouter", add("é" * 200))
+    response = signed_in.post("/api/ai", json={"prompt": "Add a card", "revision": 0})
+    assert response.status_code == 422
+    assert "too large" in response.json()["detail"]
+    assert signed_in.get("/api/board").json()["revision"] == 0
+    monkeypatch.setattr(main, "call_openrouter", add("é" * 100))
+    board = signed_in.post("/api/ai", json={"prompt": "Add a card", "revision": 0}).json()["board"]
+    assert board["revision"] == 1
+    # Encode like the browser's JSON.stringify: raw UTF-8, no whitespace.
+    body = json.dumps({"board": board}, ensure_ascii=False, separators=(",", ":")).encode()
+    assert signed_in.post("/api/board", content=body, headers={"Content-Type": "application/json"}).status_code == 200
+
+
 @pytest.mark.parametrize("payload", [
     {"prompt": "hi", "revision": 0, "conversation": 1},
     {"prompt": "hi", "revision": 0, "board": "invalid"},

@@ -11,7 +11,7 @@ import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, moveCard, type BoardData } from "@/lib/kanban";
 import { api, ApiError } from "@/lib/api";
 
-type KanbanBoardProps = { onLogout?: () => void; onSessionExpired?: () => void };
+type KanbanBoardProps = { onLogout?: () => void; onSessionExpired?: (message: string) => void };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 const pointerWithinOrClosestCorners: CollisionDetection = (args) => {
   const collisions = pointerWithin(args);
@@ -47,7 +47,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
         }
       } catch (cause) {
         if (!controller.signal.aborted) {
-          if (cause instanceof ApiError && cause.status === 401) expired.current?.();
+          if (cause instanceof ApiError && cause.status === 401) expired.current?.("Your session expired. Sign in again.");
           setError("Unable to load the board. Retry to load your saved data.");
         }
       } finally {
@@ -67,8 +67,9 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
   const editorOpen = !!(editingCardId && board?.cards[editingCardId]);
   const aiDisabled = disabled || editorOpen;
 
-  const reportFailure = (cause: unknown, fallback: string) => {
-    if (cause instanceof ApiError && cause.status === 401) expired.current?.();
+  // Session expiry unmounts the board, so the lost-work notice travels with it to the sign-in screen.
+  const reportFailure = (cause: unknown, fallback: string, expiredMessage: string) => {
+    if (cause instanceof ApiError && cause.status === 401) expired.current?.(expiredMessage);
     if (cause instanceof ApiError && cause.status === 409) setConflict(true);
     setError(cause instanceof ApiError ? cause.message : fallback);
   };
@@ -90,7 +91,8 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
     } catch (cause) {
       if (!signal?.aborted) {
         setUnsaved(next);
-        reportFailure(cause, "Unable to save. Your edits are kept here; retry or reload the saved board.");
+        reportFailure(cause, "Unable to save. Your edits are kept here; retry or reload the saved board.",
+          "Your session expired, so your last change was not saved. Sign in again and redo it.");
       }
     } finally {
       if (!signal?.aborted) { busy.current = false; setIsSaving(false); }
@@ -152,7 +154,8 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
     } catch (cause) {
       if (!signal?.aborted) {
         setAiPrompt(prompt);
-        reportFailure(cause, "The assistant request did not complete. Reload the board before retrying if the connection was lost.");
+        reportFailure(cause, "The assistant request did not complete. Reload the board before retrying if the connection was lost.",
+          "Your session expired, so the assistant's changes were not saved. Sign in again and resend your message.");
       }
     } finally {
       if (!signal?.aborted) { busy.current = false; setIsAiBusy(false); }

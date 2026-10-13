@@ -193,3 +193,26 @@ it("restores and logs out a server session", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Log out" }));
   await screen.findByRole("heading", { name: "Sign in" }); expect(signedIn).toBe(false);
 });
+
+it("explains on the sign-in screen that an expired session dropped the edit", async () => {
+  signedIn = true; const original = global.fetch;
+  global.fetch = vi.fn((input, init) => init?.method === "POST" && String(input) === "/api/board"
+    ? Promise.resolve(response({ detail: "Please sign in." }, 401)) : original(input, init));
+  render(<Home />); await loaded();
+  await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done");
+  await screen.findByRole("heading", { name: "Sign in" });
+  expect(screen.getByRole("alert")).toHaveTextContent("your last change was not saved");
+  await userEvent.click(screen.getByRole("button", { name: "Sign in" })); await loaded();
+  expect(screen.queryByText(/your last change was not saved/)).not.toBeInTheDocument();
+});
+
+it("explains on the sign-in screen that an expired session dropped the assistant's changes", async () => {
+  signedIn = true; const original = global.fetch;
+  global.fetch = vi.fn((input, init) => String(input) === "/api/ai"
+    ? Promise.resolve(response({ detail: "Please sign in." }, 401)) : original(input, init));
+  render(<Home />); await loaded();
+  await userEvent.type(screen.getByLabelText("Message to board assistant"), "Move first card");
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByRole("heading", { name: "Sign in" });
+  expect(screen.getByRole("alert")).toHaveTextContent("the assistant's changes were not saved");
+});

@@ -1,3 +1,4 @@
+import json
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -17,6 +18,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "out"
 logger = logging.getLogger(__name__)
 MAX_BODY_BYTES = 1024 * 1024
+
+
+def board_body_bytes(board: dict) -> int:
+    """Size of the manual save request the browser would send for this board."""
+    return len(json.dumps({"board": board}, ensure_ascii=False, separators=(",", ":")).encode())
 
 
 class LimitRequestBody:
@@ -147,6 +153,10 @@ async def ai_chat(payload: AIRequest, request: Request, username: str = Depends(
     except (httpx.RequestError, RuntimeError, ValueError) as exc:
         logger.warning("AI provider failed: %s: %s", type(exc).__name__, exc)
         raise HTTPException(status_code=502, detail="The assistant is unavailable or returned an invalid response.") from exc
+    # Every stored board must stay saveable through the size-limited manual path.
+    if result["actions"] and board_body_bytes(result["board"]) > MAX_BODY_BYTES:
+        raise HTTPException(status_code=422,
+            detail="The assistant's changes would make the board too large to save. Ask for fewer or shorter cards.")
     await run_in_threadpool(require_user, request)
     if result["actions"]:
         saved = await run_in_threadpool(commit_board, username, result["board"], request)

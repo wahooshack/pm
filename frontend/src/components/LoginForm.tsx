@@ -5,12 +5,13 @@ import { ApiError } from "@/lib/api";
 
 type LoginFormProps = {
   onSubmit: (username: string, password: string) => Promise<void>;
+  notice?: string | null;
 };
 
 const VALID_USERNAME = "user";
 const VALID_PASSWORD = "password";
 
-export const LoginForm = ({ onSubmit }: LoginFormProps) => {
+export const LoginForm = ({ onSubmit, notice }: LoginFormProps) => {
   const [username, setUsername] = useState(VALID_USERNAME);
   const [password, setPassword] = useState(VALID_PASSWORD);
   const [error, setError] = useState("");
@@ -42,6 +43,11 @@ export const LoginForm = ({ onSubmit }: LoginFormProps) => {
         <p className="mt-3 text-sm leading-6 text-[var(--gray-text)]">
           Use the demo account to access the board.
         </p>
+        {notice ? (
+          <p role="alert" className="mt-4 rounded-2xl border border-[var(--accent-yellow)] px-4 py-3 text-sm font-medium text-[var(--navy-dark)]">
+            {notice}
+          </p>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           <label className="block text-sm font-medium text-[var(--navy-dark)]">
