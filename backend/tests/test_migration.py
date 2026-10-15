@@ -81,3 +81,14 @@ def test_fresh_database_seeds_demo_admin_with_sample_board(client):
     database.init_db()
     with database.get_connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM boards").fetchone()[0] == 0
+
+
+def test_schema_document_matches_the_database(client):
+    import json
+    documented = json.loads((database.PROJECT_ROOT / "docs" / "kanban-schema.json").read_text())
+    with database.get_connection() as connection:
+        actual = {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")}
+        assert {table["name"] for table in documented["tables"]} == actual
+        for table in documented["tables"]:
+            columns = [row["name"] for row in connection.execute(f"PRAGMA table_info({table['name']})")]
+            assert [column["name"] for column in table["columns"]] == columns

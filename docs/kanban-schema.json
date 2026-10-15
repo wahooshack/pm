@@ -1,11 +1,11 @@
 {
   "database_name": "pm.db",
-  "version": 2,
-  "description": "SQLite schema for the local project management MVP with one board per authenticated user and room for future multi-user expansion.",
+  "version": 3,
+  "description": "SQLite schema for the project management app: user accounts with an admin role, multiple boards per user, board sharing, custom columns and cards with planning fields.",
   "tables": [
     {
       "name": "users",
-      "purpose": "Stores the signed-in users supported by the MVP and future multi-user expansion.",
+      "purpose": "User accounts.",
       "columns": [
         {
           "name": "id",
@@ -38,16 +38,41 @@
             "NOT NULL",
             "DEFAULT CURRENT_TIMESTAMP"
           ]
+        },
+        {
+          "name": "password_hash",
+          "type": "TEXT",
+          "constraints": [
+            "NOT NULL",
+            "DEFAULT ''"
+          ]
+        },
+        {
+          "name": "is_admin",
+          "type": "INTEGER",
+          "constraints": [
+            "NOT NULL",
+            "DEFAULT 0"
+          ]
+        },
+        {
+          "name": "is_active",
+          "type": "INTEGER",
+          "constraints": [
+            "NOT NULL",
+            "DEFAULT 1"
+          ]
         }
       ],
       "notes": [
-        "This table is intentionally minimal for the MVP.",
-        "The current app uses the hardcoded demo login, but the schema is ready for additional users later."
+        "Usernames match ^[a-z0-9][a-z0-9_.-]{2,31}$.",
+        "password_hash is scrypt$<salt hex>$<hash hex>.",
+        "Disabled users cannot sign in and their sessions are ignored."
       ]
     },
     {
       "name": "boards",
-      "purpose": "Stores the board for each user. The MVP only allows one board per user.",
+      "purpose": "Boards owned by users; a user may own many.",
       "columns": [
         {
           "name": "id",
@@ -62,7 +87,6 @@
           "type": "INTEGER",
           "constraints": [
             "NOT NULL",
-            "UNIQUE",
             "FOREIGN KEY REFERENCES users(id)"
           ]
         },
@@ -72,6 +96,14 @@
           "constraints": [
             "NOT NULL",
             "DEFAULT 'Main Board'"
+          ]
+        },
+        {
+          "name": "revision",
+          "type": "INTEGER",
+          "constraints": [
+            "NOT NULL",
+            "DEFAULT 0"
           ]
         },
         {
@@ -89,29 +121,58 @@
             "NOT NULL",
             "DEFAULT CURRENT_TIMESTAMP"
           ]
-        },
+        }
+      ],
+      "notes": [
+        "user_id is the owner.",
+        "revision increments on every successful write; stale writes return 409."
+      ]
+    },
+    {
+      "name": "board_members",
+      "purpose": "Users a board is shared with.",
+      "columns": [
         {
-          "name": "revision",
+          "name": "board_id",
           "type": "INTEGER",
           "constraints": [
             "NOT NULL",
-            "DEFAULT 0"
+            "PRIMARY KEY (board_id, user_id)",
+            "FOREIGN KEY REFERENCES boards(id)"
+          ]
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "constraints": [
+            "NOT NULL",
+            "FOREIGN KEY REFERENCES users(id)"
+          ]
+        },
+        {
+          "name": "role",
+          "type": "TEXT",
+          "constraints": [
+            "NOT NULL",
+            "CHECK (role IN ('editor', 'viewer'))"
           ]
         }
       ],
       "notes": [
-        "One board per user. Writes compare and increment revision atomically."
+        "Editors change cards and columns; viewers only read.",
+        "Only the owner manages members."
       ]
     },
     {
       "name": "columns",
-      "purpose": "Defines the ordered set of board columns and their display titles.",
+      "purpose": "Ordered columns of a board.",
       "columns": [
         {
           "name": "id",
           "type": "TEXT",
           "constraints": [
-            "NOT NULL"
+            "NOT NULL",
+            "PRIMARY KEY (board_id, id)"
           ]
         },
         {
@@ -138,23 +199,19 @@
         }
       ],
       "notes": [
-        "The current frontend has five fixed columns: Backlog, Discovery, In Progress, Review, and Done.",
-        "The position column preserves ordering between columns."
-      ],
-      "primary_key": [
-        "board_id",
-        "id"
+        "A board has 1 to 20 columns with unique IDs."
       ]
     },
     {
       "name": "cards",
-      "purpose": "Stores the cards inside each column, including card order and note content.",
+      "purpose": "Cards, each in exactly one column of its board.",
       "columns": [
         {
           "name": "id",
           "type": "TEXT",
           "constraints": [
-            "NOT NULL"
+            "NOT NULL",
+            "PRIMARY KEY (board_id, id)"
           ]
         },
         {
@@ -169,7 +226,8 @@
           "name": "column_id",
           "type": "TEXT",
           "constraints": [
-            "NOT NULL"
+            "NOT NULL",
+            "FOREIGN KEY (board_id, column_id) REFERENCES columns(board_id, id)"
           ]
         },
         {
@@ -209,30 +267,43 @@
             "NOT NULL",
             "DEFAULT CURRENT_TIMESTAMP"
           ]
+        },
+        {
+          "name": "due_date",
+          "type": "TEXT",
+          "constraints": []
+        },
+        {
+          "name": "priority",
+          "type": "TEXT",
+          "constraints": []
+        },
+        {
+          "name": "labels",
+          "type": "TEXT",
+          "constraints": [
+            "NOT NULL",
+            "DEFAULT '[]'"
+          ]
+        },
+        {
+          "name": "assignee_id",
+          "type": "INTEGER",
+          "constraints": [
+            "FOREIGN KEY REFERENCES users(id)"
+          ]
         }
       ],
       "notes": [
-        "Cards are tracked by column_id and position so drag-and-drop ordering is preserved without storing a separate movement log.",
-        "The details field replaces the current per-card metadata pattern used in the frontend demo.",
-        "created_at/updated_at are reset by each board save (rows are replaced); they are not per-card history."
-      ],
-      "primary_key": [
-        "board_id",
-        "id"
-      ],
-      "foreign_keys": [
-        {
-          "columns": [
-            "board_id",
-            "column_id"
-          ],
-          "references": "columns(board_id,id)"
-        }
+        "due_date is YYYY-MM-DD or null.",
+        "priority is low, medium, high or null.",
+        "labels is a JSON array of up to 10 unique labels (1-30 characters).",
+        "assignee_id is the board owner or a member, or null."
       ]
     },
     {
       "name": "sessions",
-      "purpose": "Hashed opaque server sessions with revocation and expiration.",
+      "purpose": "Expiring server sessions.",
       "columns": [
         {
           "name": "token_hash",
@@ -256,20 +327,11 @@
             "NOT NULL"
           ]
         }
+      ],
+      "notes": [
+        "Only the SHA-256 hash of the cookie token is stored.",
+        "Sessions last eight hours."
       ]
     }
-  ],
-  "relationship_summary": {
-    "users": "one-to-one with boards",
-    "boards": "one-to-many with columns and cards",
-    "columns": "one-to-many with cards",
-    "data_shape": "Each board has a fixed ordered column list, and each card belongs to one column with a position value."
-  },
-  "mvp_assumptions": [
-    "The app will support a single board per user in the MVP.",
-    "Authentication is still a simple hardcoded sign-in flow for the demo, but user records exist in the database model for future expansion.",
-    "The board and all its columns/cards are stored in SQLite and recreated automatically if the database does not already exist.",
-    "Column names and card order are persisted in the database rather than only in browser memory."
-  ],
-  "migration": "Startup adds boards.revision and rebuilds legacy columns/cards with board-scoped keys in one transaction, preserving data."
+  ]
 }

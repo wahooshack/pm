@@ -3,19 +3,20 @@
 ## Business Requirements
 
 This project is building a Project Management App. Key features:
-- A user can sign in
-- When signed in, the user sees a Kanban board representing their project
-- The Kanban board has fixed columns that can be renamed
-- The cards on the Kanban board can be moved with drag and drop, and edited
-- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards
+- Users can create an account, sign in, and change their display name and password
+- Administrators can list users, disable or re-enable them, grant or remove admin, and reset passwords
+- A user can own multiple Kanban boards and switch between them; boards can be created, renamed and deleted
+- A board owner can share a board with other users as an editor or a viewer
+- Boards have custom columns that can be added, renamed, reordered and deleted when empty
+- Cards can be moved with drag and drop, and edited, including due date, priority, labels and assignee
+- Cards can be searched and filtered by text, priority, label, assignee and overdue
+- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards, set card fields, and add or remove empty columns
 
 ## Limitations
 
-For the MVP, there will only be a user sign in (hardcoded to 'user' and 'password') but the database will support multiple users for future.
+The demo account 'user' / 'password' is seeded as an administrator with a sample board.
 
-For the MVP, there will only be 1 Kanban board per signed in user.
-
-For the MVP, this will run locally (in a docker container)
+This runs locally (in a docker container) and should stay on loopback.
 
 ## Technical Decisions
 
@@ -30,7 +31,7 @@ For the MVP, this will run locally (in a docker container)
 
 ## Current implementation
 
-FastAPI serves the Next.js static export and protected JSON API. The demo account uses backend-managed expiring sessions. SQLite stores board-scoped IDs and revision-checked writes; startup migrates existing databases without discarding data. Manual editing, pointer/keyboard movement, and server-committed AI updates are implemented. Docker mounts only runtime data and publishes on loopback. See docs/REMEDIATION.md for current validation and limitations.
+FastAPI serves the Next.js static export and protected JSON API. Accounts use scrypt password hashes and backend-managed expiring sessions. SQLite stores users, boards, members, board-scoped columns and cards, and revision-checked writes; startup migrates existing databases without discarding data. Manual editing, pointer/keyboard movement, filtering, sharing, and server-committed AI updates are implemented. Docker mounts only runtime data and publishes on loopback. See docs/DATABASE.md for the data model and docs/PLAN.md for build status.
 
 ## Color Scheme
 

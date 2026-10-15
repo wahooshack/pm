@@ -7,7 +7,7 @@ With the root `.venv` prepared and Node 24 installed:
 ```text
 npm ci
 npm run lint
-npm run test:unit
+npm run test:unit        # or npm run test:coverage
 npm run test:e2e
 ```
 
