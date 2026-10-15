@@ -8,7 +8,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, moveCard, type BoardData } from "@/lib/kanban";
+import { createId, MAX_COLUMNS, moveCard, shiftColumn, type BoardData } from "@/lib/kanban";
 import { api, ApiError } from "@/lib/api";
 
 type KanbanBoardProps = { boardId: number; onBoardRenamed?: (name: string) => void; onSessionExpired?: (message: string) => void };
@@ -119,6 +119,18 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
     if (!board || disabled || busy.current) return;
     void saveBoard({ ...board, columns: board.columns.map(c => c.id === id ? { ...c, title } : c) });
   };
+  const handleAddColumn = (title: string) => {
+    if (!board || disabled || busy.current || board.columns.length >= MAX_COLUMNS) return;
+    void saveBoard({ ...board, columns: [...board.columns, { id: createId("col"), title, cardIds: [] }] }, "new-column-title");
+  };
+  const handleShiftColumn = (id: string, offset: -1 | 1) => {
+    if (!board || disabled || busy.current) return;
+    void saveBoard({ ...board, columns: shiftColumn(board.columns, id, offset) }, `column-title-${id}`);
+  };
+  const handleDeleteColumn = (id: string) => {
+    if (!board || disabled || busy.current || board.columns.find(c => c.id === id)?.cardIds.length) return;
+    void saveBoard({ ...board, columns: board.columns.filter(c => c.id !== id) }, "new-column-title");
+  };
   const handleAddCard = (columnId: string, title: string, details: string) => {
     if (!board || disabled || busy.current) return;
     const id = createId("card");
@@ -183,7 +195,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
       <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
-      <main className="relative mx-auto flex max-w-[1500px] flex-col gap-6 px-6 pb-16 pt-8">
+      <main className="relative mx-auto flex max-w-[1800px] flex-col gap-6 px-6 pb-16 pt-8">
         <div className="flex flex-wrap items-center gap-3">
           <input
             key={board.name}
@@ -202,6 +214,23 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
             }}
             className="min-w-0 flex-1 bg-transparent font-display text-3xl font-semibold text-[var(--navy-dark)] outline-none disabled:cursor-default disabled:opacity-100"
           />
+          {!readOnly && board.columns.length < MAX_COLUMNS && (
+            <form className="flex items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const input = event.currentTarget.elements.namedItem("title") as HTMLInputElement;
+                const title = input.value.trim();
+                if (title) { handleAddColumn(title); input.value = ""; }
+              }}>
+              <input id="new-column-title" name="title" maxLength={200} disabled={disabled} required
+                aria-label="New column title" placeholder="New column"
+                className="w-40 rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--primary-blue)]" />
+              <button type="submit" disabled={disabled}
+                className="rounded-full border border-dashed border-[var(--stroke)] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)]">
+                Add column
+              </button>
+            </form>
+          )}
           {readOnly && (
             <span className="rounded-full border border-[var(--stroke)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
               View only
@@ -224,7 +253,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
         ) : null}
 
         {isSaving && <p role="status">Saving board...</p>}
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
           <DndContext
             sensors={sensors}
             collisionDetection={pointerWithinOrClosestCorners}
@@ -232,7 +261,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
             onDragCancel={() => setActiveCardId(null)}
             onDragEnd={handleDragEnd}
           >
-            <section className="grid gap-6 lg:grid-cols-5">
+            <section aria-label="Board columns" className="flex items-start gap-6 overflow-x-auto pb-4">
               {board.columns.map((column) => (
                 <KanbanColumn
                   key={column.id}
@@ -243,6 +272,8 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
                   onDeleteCard={handleDeleteCard}
                   onEditCard={handleEditCard}
                   onMoveCard={handleMoveCard}
+                  onShift={handleShiftColumn}
+                  onDeleteColumn={handleDeleteColumn}
                   columns={board.columns}
                   disabled={disabled}
                   editingCardId={editingCardId}

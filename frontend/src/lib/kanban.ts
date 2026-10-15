@@ -136,3 +136,16 @@ export const createId = (prefix: string) => {
   const timePart = Date.now().toString(36);
   return `${prefix}-${randomPart}${timePart}`;
 };
+
+export const MAX_COLUMNS = 20;
+
+export const shiftColumn = (columns: Column[], columnId: string, offset: -1 | 1): Column[] => {
+  const index = columns.findIndex((column) => column.id === columnId);
+  const target = index + offset;
+  if (index === -1 || target < 0 || target >= columns.length) {
+    return columns;
+  }
+  const next = [...columns];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+};

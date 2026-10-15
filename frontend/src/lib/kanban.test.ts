@@ -1,4 +1,4 @@
-import { moveCard, type Column } from "@/lib/kanban";
+import { moveCard, shiftColumn, type Column } from "@/lib/kanban";
 
 describe("moveCard", () => {
   const baseColumns: Column[] = [
@@ -45,5 +45,24 @@ describe("moveCard", () => {
     const result = moveCard(emptyColumns, "card-1", "col-b-empty-zone");
     expect(result[0].cardIds).toEqual([]);
     expect(result[1].cardIds).toEqual(["card-1"]);
+  });
+});
+
+describe("shiftColumn", () => {
+  const columns: Column[] = [
+    { id: "col-a", title: "A", cardIds: [] },
+    { id: "col-b", title: "B", cardIds: ["card-1"] },
+    { id: "col-c", title: "C", cardIds: [] },
+  ];
+
+  it("swaps a column with its neighbour", () => {
+    expect(shiftColumn(columns, "col-b", -1).map((column) => column.id)).toEqual(["col-b", "col-a", "col-c"]);
+    expect(shiftColumn(columns, "col-b", 1).map((column) => column.id)).toEqual(["col-a", "col-c", "col-b"]);
+  });
+
+  it("leaves the order unchanged at the edges or for unknown columns", () => {
+    expect(shiftColumn(columns, "col-a", -1)).toBe(columns);
+    expect(shiftColumn(columns, "col-c", 1)).toBe(columns);
+    expect(shiftColumn(columns, "missing", 1)).toBe(columns);
   });
 });

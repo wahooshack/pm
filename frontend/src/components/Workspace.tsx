@@ -84,7 +84,7 @@ export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) 
       <AppHeader user={user} boards={boards ?? []} currentId={currentId} busy={busy || !boards}
         onSelect={select} onCreate={name => void createBoard(name)} onDelete={deleteBoard} onLogout={onLogout} />
       {error && (
-        <div role="alert" className="mx-auto mt-4 max-w-[1500px] px-6">
+        <div role="alert" className="mx-auto mt-4 max-w-[1800px] px-6">
           <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {error}
             {!boards && <button onClick={() => setLoadAttempt(attempt => attempt + 1)} className="ml-3 underline">Retry</button>}
@@ -93,7 +93,7 @@ export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) 
       )}
       {!boards && !error && <p role="status" className="p-8">Loading boards...</p>}
       {boards && currentId === null && (
-        <p className="mx-auto max-w-[1500px] px-6 py-12 text-[var(--gray-text)]">You have no boards yet. Create one with New board.</p>
+        <p className="mx-auto max-w-[1800px] px-6 py-12 text-[var(--gray-text)]">You have no boards yet. Create one with New board.</p>
       )}
       {currentId !== null && (
         <KanbanBoard key={currentId} boardId={currentId} onBoardRenamed={renamed} onSessionExpired={onSessionExpired} />

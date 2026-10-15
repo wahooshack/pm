@@ -13,19 +13,28 @@ type KanbanColumnProps = {
   onDeleteCard: (columnId: string, cardId: string) => void;
   onEditCard: (cardId: string, title: string, details: string) => void;
   onMoveCard: (cardId: string, columnId: string) => void;
+  onShift: (columnId: string, offset: -1 | 1) => void;
+  onDeleteColumn: (columnId: string) => void;
   columns: Column[];
   disabled: boolean;
   editingCardId: string | null;
   onEditingChange: (cardId: string | null) => void;
 };
 
+const columnButton = "flex h-7 w-7 items-center justify-center rounded-lg text-[var(--gray-text)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--navy-dark)] disabled:hover:bg-transparent";
+const arrowProps = {
+  "aria-hidden": true, width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+  strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round",
+} as const;
+
 export const KanbanColumn = ({
   column,
   cards,
   onRename,
   onAddCard,
-  onDeleteCard, onEditCard, onMoveCard, columns, disabled, editingCardId, onEditingChange,
+  onDeleteCard, onEditCard, onMoveCard, onShift, onDeleteColumn, columns, disabled, editingCardId, onEditingChange,
 }: KanbanColumnProps) => {
+  const index = columns.findIndex((entry) => entry.id === column.id);
   const droppableId = cards.length === 0 ? `${column.id}-empty-zone` : column.id;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId, disabled });
 
@@ -33,7 +42,7 @@ export const KanbanColumn = ({
     <section
       ref={setNodeRef}
       className={clsx(
-        "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
+        "flex min-h-[520px] min-w-[220px] max-w-[340px] flex-1 basis-0 flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
         isOver && "ring-2 ring-[var(--accent-yellow)]"
       )}
       data-testid={`column-${column.id}`}
@@ -43,8 +52,25 @@ export const KanbanColumn = ({
           <div className="flex items-center gap-3">
             <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-              {cards.length} cards
+              {cards.length} {cards.length === 1 ? "card" : "cards"}
             </span>
+            <div className="ml-auto flex items-center">
+              <button type="button" disabled={disabled || index === 0} onClick={() => onShift(column.id, -1)}
+                aria-label={`Move column ${column.title} left`} title="Move left" className={columnButton}>
+                <svg {...arrowProps}><path d="M15 6l-6 6 6 6" /></svg>
+              </button>
+              <button type="button" disabled={disabled || index === columns.length - 1} onClick={() => onShift(column.id, 1)}
+                aria-label={`Move column ${column.title} right`} title="Move right" className={columnButton}>
+                <svg {...arrowProps}><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+              {cards.length === 0 && columns.length > 1 && (
+                <button type="button" disabled={disabled} onClick={() => onDeleteColumn(column.id)}
+                  aria-label={`Delete column ${column.title}`} title="Delete empty column"
+                  className={clsx(columnButton, "hover:bg-red-50 hover:text-red-700")}>
+                  <svg {...arrowProps}><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              )}
+            </div>
           </div>
           <input
             id={`column-title-${column.id}`}

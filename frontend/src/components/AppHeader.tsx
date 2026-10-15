@@ -32,7 +32,7 @@ export const AppHeader = ({ user, boards, currentId, busy, onSelect, onCreate, o
 
   return (
     <header className="border-b border-[var(--stroke)] bg-white/80 backdrop-blur">
-      <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-4 px-6 py-4">
+      <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-4 px-6 py-4">
         <h1 className="font-display text-xl font-semibold text-[var(--navy-dark)]">Kanban Studio</h1>
         <span className="h-6 w-px bg-[var(--stroke)]" />
         {boards.length > 0 && (

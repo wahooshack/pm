@@ -5,7 +5,7 @@ import a11y from "eslint-plugin-jsx-a11y";
 import globals from "globals";
 
 export default ts.config(
-  { ignores: [".next/**", "out/**", "build/**", "node_modules/**", "test-results/**", "next-env.d.ts"] },
+  { ignores: [".next/**", "out/**", "build/**", "node_modules/**", "test-results/**", "coverage/**", "playwright-report/**", "next-env.d.ts"] },
   js.configs.recommended,
   ...ts.configs.recommended,
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },

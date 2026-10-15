@@ -252,3 +252,27 @@ it("treats a non-JSON 401 as session expiry", async () => {
   await screen.findByRole("heading", { name: "Sign in" });
   expect(screen.getByRole("alert")).toHaveTextContent("your last change was not saved");
 });
+
+it("adds, reorders and deletes columns", async () => {
+  render(<KanbanBoard boardId={1} />); await loaded();
+  expect(screen.getByRole("button", { name: "Move column Backlog left" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Move column Done right" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Delete column Backlog" })).not.toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("New column title"), "Blocked");
+  await userEvent.click(screen.getByRole("button", { name: "Add column" })); await saved();
+  expect(board.columns.map(c => c.title)).toEqual(["Backlog", "Discovery", "In Progress", "Review", "Done", "Blocked"]);
+  expect(screen.getByLabelText("New column title")).toHaveValue("");
+  await userEvent.click(screen.getByRole("button", { name: "Move column Blocked left" })); await saved();
+  expect(board.columns.map(c => c.title).slice(-2)).toEqual(["Blocked", "Done"]);
+  await userEvent.click(screen.getByRole("button", { name: "Delete column Blocked" })); await saved();
+  expect(board.columns).toHaveLength(5);
+  expect(screen.getAllByTestId(/column-/)).toHaveLength(5);
+});
+
+it("hides column editing for viewers", async () => {
+  board.role = "viewer";
+  render(<KanbanBoard boardId={1} />); await loaded();
+  expect(screen.queryByLabelText("New column title")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Move column Review left" })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: "Column title: Backlog" })).toBeDisabled();
+});
