@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Card, Column } from "@/lib/kanban";
-import { KanbanCard } from "@/components/KanbanCard";
+import { KanbanCard, type CardChanges } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
 type KanbanColumnProps = {
@@ -11,12 +11,14 @@ type KanbanColumnProps = {
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
-  onEditCard: (cardId: string, title: string, details: string) => void;
+  onEditCard: (cardId: string, changes: CardChanges) => void;
   onMoveCard: (cardId: string, columnId: string) => void;
   onShift: (columnId: string, offset: -1 | 1) => void;
   onDeleteColumn: (columnId: string) => void;
   columns: Column[];
+  participants: string[];
   disabled: boolean;
+  dragDisabled?: boolean;
   editingCardId: string | null;
   onEditingChange: (cardId: string | null) => void;
 };
@@ -32,7 +34,7 @@ export const KanbanColumn = ({
   cards,
   onRename,
   onAddCard,
-  onDeleteCard, onEditCard, onMoveCard, onShift, onDeleteColumn, columns, disabled, editingCardId, onEditingChange,
+  onDeleteCard, onEditCard, onMoveCard, onShift, onDeleteColumn, columns, participants, disabled, dragDisabled, editingCardId, onEditingChange,
 }: KanbanColumnProps) => {
   const index = columns.findIndex((entry) => entry.id === column.id);
   const droppableId = cards.length === 0 ? `${column.id}-empty-zone` : column.id;
@@ -102,8 +104,10 @@ export const KanbanColumn = ({
               onEdit={onEditCard}
               onMove={onMoveCard}
               columns={columns}
+              participants={participants}
               columnId={column.id}
               disabled={disabled}
+              dragDisabled={dragDisabled}
               editing={editingCardId === card.id}
               onEditingChange={onEditingChange}
             />

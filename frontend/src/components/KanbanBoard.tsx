@@ -8,6 +8,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import type { CardChanges } from "@/components/KanbanCard";
 import { createId, MAX_COLUMNS, moveCard, shiftColumn, type BoardData } from "@/lib/kanban";
 import { api, ApiError } from "@/lib/api";
 
@@ -32,6 +33,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
   const [conflict, setConflict] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [participants, setParticipants] = useState<string[]>([]);
   const requestController = useRef<AbortController | null>(null);
   const busy = useRef(false);
   const expired = useRef(onSessionExpired);
@@ -42,9 +44,12 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
     requestController.current = controller;
     async function load() {
       try {
-        const data = await api<BoardData>(boardUrl, undefined, controller.signal);
+        const [data, people] = await Promise.all([
+          api<BoardData>(boardUrl, undefined, controller.signal),
+          api<string[]>(`${boardUrl}/participants`, undefined, controller.signal),
+        ]);
         if (!controller.signal.aborted) {
-          setBoard(data); setError(null); setUnsaved(null); setConflict(false);
+          setBoard(data); setParticipants(people); setError(null); setUnsaved(null); setConflict(false);
         }
       } catch (cause) {
         if (!controller.signal.aborted) {
@@ -137,9 +142,9 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
     void saveBoard({ ...board, cards: { ...board.cards, [id]: { id, title, details, dueDate: null, priority: null, labels: [], assignee: null } },
       columns: board.columns.map(c => c.id === columnId ? { ...c, cardIds: [...c.cardIds, id] } : c) });
   };
-  const handleEditCard = (id: string, title: string, details: string) => {
+  const handleEditCard = (id: string, changes: CardChanges) => {
     if (!board || disabled || busy.current) return;
-    void saveBoard({ ...board, cards: { ...board.cards, [id]: { ...board.cards[id], title, details } } }, `edit-${id}`);
+    void saveBoard({ ...board, cards: { ...board.cards, [id]: { ...board.cards[id], ...changes } } }, `edit-${id}`);
   };
   const handleMoveCard = (cardId: string, columnId: string) => {
     if (!board || disabled || busy.current) return;
@@ -275,6 +280,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
                   onShift={handleShiftColumn}
                   onDeleteColumn={handleDeleteColumn}
                   columns={board.columns}
+                  participants={participants}
                   disabled={disabled}
                   editingCardId={editingCardId}
                   onEditingChange={setEditingCardId}

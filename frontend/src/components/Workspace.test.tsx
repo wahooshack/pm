@@ -31,6 +31,7 @@ beforeEach(() => {
       return response(boards[id]);
     }
     if (path === "/api/boards") return response(summaries);
+    if (path.endsWith("/participants")) return response(["user"]);
     const match = path.match(/^\/api\/boards\/(\d+)$/);
     if (match && init?.method === "DELETE") { delete boards[Number(match[1])]; return response({ ok: true }); }
     if (match && init?.method === "POST") {

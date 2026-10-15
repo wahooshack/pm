@@ -29,6 +29,7 @@ beforeEach(() => {
     }
     if (path === "/api/logout") { signedIn = false; return response({ ok: true }); }
     if (path === "/api/boards") return response([{ id: 1, name: board.name, role: "owner", owner: "user" }]);
+    if (path.endsWith("/participants")) return response(["alice", "user"]);
     if (path === "/api/boards/1" && init?.method === "POST") {
       posts++; board = { ...JSON.parse(String(init.body)).board, revision: board.revision + 1 };
       return response(board);
@@ -117,7 +118,7 @@ it("does not expose seed data while loading or after a load failure", async () =
   await act(async () => pending.resolve(response({ detail: "offline" }, 503)));
   expect(screen.getByRole("alert")).toHaveTextContent("Unable to load");
   expect(screen.queryByRole("button", { name: "Add a card" })).not.toBeInTheDocument();
-  global.fetch = vi.fn(async () => response(board));
+  global.fetch = vi.fn(async (input) => response(String(input).endsWith("/participants") ? [] : board));
   await userEvent.click(screen.getByRole("button", { name: "Retry loading board" })); await loaded();
 });
 
@@ -275,4 +276,39 @@ it("hides column editing for viewers", async () => {
   expect(screen.queryByLabelText("New column title")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Move column Review left" })).toBeDisabled();
   expect(screen.getByRole("textbox", { name: "Column title: Backlog" })).toBeDisabled();
+});
+
+it("edits due date, priority, labels and assignee and shows them on the card", async () => {
+  render(<KanbanBoard boardId={1} />); await loaded();
+  await userEvent.click(screen.getByRole("button", { name: "Edit Align roadmap themes" }));
+  await userEvent.type(screen.getByLabelText("Due date"), "2020-01-15");
+  await userEvent.selectOptions(screen.getByLabelText("Priority"), "high");
+  await userEvent.type(screen.getByLabelText("Labels"), "Bug, ui, bug");
+  expect(within(screen.getByLabelText("Assignee")).getAllByRole("option").map(o => o.textContent)).toEqual(["Unassigned", "alice", "user"]);
+  await userEvent.selectOptions(screen.getByLabelText("Assignee"), "alice");
+  await userEvent.click(screen.getByRole("button", { name: "Save card" })); await saved();
+  expect(board.cards["card-1"]).toMatchObject({ dueDate: "2020-01-15", priority: "high", labels: ["Bug", "ui"], assignee: "alice" });
+  const card = screen.getByTestId("card-card-1");
+  expect(within(card).getByText("high priority")).toBeInTheDocument();
+  expect(within(card).getByText("Overdue Jan 15, 2020")).toBeInTheDocument();
+  expect(within(card).getByText("Bug")).toBeInTheDocument();
+  expect(within(card).getByLabelText("Assigned to alice")).toHaveTextContent("AL");
+
+  await userEvent.click(screen.getByRole("button", { name: "Edit Align roadmap themes" }));
+  expect(screen.getByLabelText("Labels")).toHaveValue("Bug, ui");
+  await userEvent.clear(screen.getByLabelText("Due date"));
+  await userEvent.selectOptions(screen.getByLabelText("Priority"), "");
+  await userEvent.clear(screen.getByLabelText("Labels"));
+  await userEvent.selectOptions(screen.getByLabelText("Assignee"), "");
+  await userEvent.click(screen.getByRole("button", { name: "Save card" })); await saved();
+  expect(board.cards["card-1"]).toMatchObject({ dueDate: null, priority: null, labels: [], assignee: null });
+  expect(within(screen.getByTestId("card-card-1")).queryByText("high priority")).not.toBeInTheDocument();
+});
+
+it("shows a future due date without the overdue warning", async () => {
+  board.cards["card-2"] = { ...board.cards["card-2"], dueDate: "2999-03-01", priority: "low" };
+  render(<KanbanBoard boardId={1} />); await loaded();
+  const card = screen.getByTestId("card-card-2");
+  expect(within(card).getByText("Due Mar 1, 2999")).toBeInTheDocument();
+  expect(within(card).getByText("low priority")).toBeInTheDocument();
 });
