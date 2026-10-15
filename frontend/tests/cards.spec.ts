@@ -6,10 +6,10 @@ resetBeforeEach();
 test("sets card fields, shows them on the card and persists them", async ({ page }) => {
   await signIn(page);
   await page.getByRole("button", { name: "Edit Align roadmap themes" }).click();
-  await page.getByLabel("Due date").fill("2020-01-15");
-  await page.getByLabel("Priority").selectOption("high");
-  await page.getByLabel("Labels").fill("Bug, Frontend");
-  await page.getByLabel("Assignee").selectOption("user");
+  await page.getByLabel("Due date", { exact: true }).fill("2020-01-15");
+  await page.getByLabel("Priority", { exact: true }).selectOption("high");
+  await page.getByLabel("Labels", { exact: true }).fill("Bug, Frontend");
+  await page.getByLabel("Assignee", { exact: true }).selectOption("user");
   await page.getByRole("button", { name: "Save card" }).click(); await waitSaved(page);
   await page.reload();
   const card = page.getByTestId("card-card-1");

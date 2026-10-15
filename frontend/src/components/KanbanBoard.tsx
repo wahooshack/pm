@@ -9,6 +9,9 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import type { CardChanges } from "@/components/KanbanCard";
+import { BoardFilters } from "@/components/BoardFilters";
+import { boardLabels, emptyFilter, isFilterActive, matchesFilter } from "@/lib/filters";
+import { todayIso } from "@/lib/cards";
 import { createId, MAX_COLUMNS, moveCard, shiftColumn, type BoardData } from "@/lib/kanban";
 import { api, ApiError } from "@/lib/api";
 
@@ -34,6 +37,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<string[]>([]);
+  const [filter, setFilter] = useState(emptyFilter);
   const requestController = useRef<AbortController | null>(null);
   const busy = useRef(false);
   const expired = useRef(onSessionExpired);
@@ -194,6 +198,10 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
     </main>;
   }
   const activeCard = activeCardId ? board.cards[activeCardId] : null;
+  const filtering = isFilterActive(filter);
+  const today = todayIso();
+  const allCards = Object.values(board.cards);
+  const visible = (cardId: string) => !filtering || matchesFilter(board.cards[cardId], filter, today);
 
   return (
     <div className="relative overflow-hidden">
@@ -243,6 +251,9 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
           )}
         </div>
 
+        <BoardFilters filter={filter} onChange={setFilter} labels={boardLabels(allCards)} participants={participants}
+          shown={allCards.filter(card => visible(card.id)).length} total={allCards.length} />
+
         {error ? (
           <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {error}
@@ -271,7 +282,9 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
                 <KanbanColumn
                   key={column.id}
                   column={column}
-                  cards={column.cardIds.map((cardId) => board.cards[cardId]).filter(Boolean)}
+                  cards={column.cardIds.filter(visible).map((cardId) => board.cards[cardId])}
+                  filtered={filtering}
+                  dragDisabled={filtering}
                   onRename={handleRenameColumn}
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}

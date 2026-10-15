@@ -42,7 +42,7 @@ Approved October 15, 2026: user management with an admin role, multiple boards, 
 - [x] 3. Custom columns UI (add, reorder, delete empty); columns share the width and the assistant stacks below the board under 1536px.
 - [x] 4. Card fields UI (due date, priority, labels, assignee).
 - [x] 5. Sharing UI (members panel, roles) and viewer read-only checks in the browser.
-- [ ] 6. Search and filter.
+- [x] 6. Search and filter (dragging is disabled while a filter is active; "Move to" still works).
 - [ ] 7. Profile and admin screens.
 - [ ] 8. Assistant UI notes for new actions; browser test for the board-scoped assistant.
 - [ ] 9. Documentation (AGENTS.md business rules, CLAUDE.md, DATABASE.md, kanban-schema.json) and coverage gaps.

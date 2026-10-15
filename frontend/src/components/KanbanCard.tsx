@@ -106,16 +106,16 @@ export const KanbanCard = ({ card, columnId, columns, participants, disabled, dr
             onChange={event => setTitle(event.target.value)} className={fieldClass} /></label>
           <label className="block text-sm">Card details<textarea maxLength={5000} disabled={disabled} value={details}
             onChange={event => setDetails(event.target.value)} className={fieldClass} /></label>
-          <label className="block text-sm">Due date<input type="date" disabled={disabled} value={dueDate}
+          <label className="block text-sm">Due date<input type="date" aria-label="Due date" disabled={disabled} value={dueDate}
             onChange={event => setDueDate(event.target.value)} className={fieldClass} /></label>
-          <label className="block text-sm">Priority<select disabled={disabled} value={priority}
+          <label className="block text-sm">Priority<select aria-label="Priority" disabled={disabled} value={priority}
             onChange={event => setPriority(event.target.value)} className={clsx(fieldClass, "bg-white")}>
             <option value="">None</option>
             {PRIORITIES.map(level => <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>)}
           </select></label>
-          <label className="block text-sm">Labels<input disabled={disabled} value={labels} placeholder="Comma separated"
+          <label className="block text-sm">Labels<input aria-label="Labels" disabled={disabled} value={labels} placeholder="Comma separated"
             onChange={event => setLabels(event.target.value)} className={fieldClass} /></label>
-          <label className="block text-sm">Assignee<select disabled={disabled} value={assignee}
+          <label className="block text-sm">Assignee<select aria-label="Assignee" disabled={disabled} value={assignee}
             onChange={event => setAssignee(event.target.value)} className={clsx(fieldClass, "bg-white")}>
             <option value="">Unassigned</option>
             {[...new Set([...participants, ...(card.assignee ? [card.assignee] : [])])].map(name => <option key={name} value={name}>{name}</option>)}

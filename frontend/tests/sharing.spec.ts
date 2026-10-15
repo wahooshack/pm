@@ -27,7 +27,7 @@ test("owner shares a board as editor then viewer, then revokes access", async ({
 
   // The owner can assign cards to members.
   await page.getByRole("button", { name: "Edit Gather customer signals" }).click();
-  await page.getByLabel("Assignee").selectOption("alice");
+  await page.getByLabel("Assignee", { exact: true }).selectOption("alice");
   await page.getByRole("button", { name: "Save card" }).click(); await waitSaved(page);
 
   // As a viewer, alice sees changes but cannot edit.

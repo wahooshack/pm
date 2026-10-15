@@ -17,6 +17,7 @@ type KanbanColumnProps = {
   onDeleteColumn: (columnId: string) => void;
   columns: Column[];
   participants: string[];
+  filtered?: boolean;
   disabled: boolean;
   dragDisabled?: boolean;
   editingCardId: string | null;
@@ -34,10 +35,10 @@ export const KanbanColumn = ({
   cards,
   onRename,
   onAddCard,
-  onDeleteCard, onEditCard, onMoveCard, onShift, onDeleteColumn, columns, participants, disabled, dragDisabled, editingCardId, onEditingChange,
+  onDeleteCard, onEditCard, onMoveCard, onShift, onDeleteColumn, columns, participants, filtered, disabled, dragDisabled, editingCardId, onEditingChange,
 }: KanbanColumnProps) => {
   const index = columns.findIndex((entry) => entry.id === column.id);
-  const droppableId = cards.length === 0 ? `${column.id}-empty-zone` : column.id;
+  const droppableId = column.cardIds.length === 0 ? `${column.id}-empty-zone` : column.id;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId, disabled });
 
   return (
@@ -54,7 +55,7 @@ export const KanbanColumn = ({
           <div className="flex items-center gap-3">
             <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-              {cards.length} {cards.length === 1 ? "card" : "cards"}
+              {filtered ? `${cards.length} of ${column.cardIds.length}` : cards.length} {column.cardIds.length === 1 ? "card" : "cards"}
             </span>
             <div className="ml-auto flex items-center">
               <button type="button" disabled={disabled || index === 0} onClick={() => onShift(column.id, -1)}
@@ -65,7 +66,7 @@ export const KanbanColumn = ({
                 aria-label={`Move column ${column.title} right`} title="Move right" className={columnButton}>
                 <svg {...arrowProps}><path d="M9 6l6 6-6 6" /></svg>
               </button>
-              {cards.length === 0 && columns.length > 1 && (
+              {column.cardIds.length === 0 && columns.length > 1 && (
                 <button type="button" disabled={disabled} onClick={() => onDeleteColumn(column.id)}
                   aria-label={`Delete column ${column.title}`} title="Delete empty column"
                   className={clsx(columnButton, "hover:bg-red-50 hover:text-red-700")}>
@@ -95,7 +96,7 @@ export const KanbanColumn = ({
         </div>
       </div>
       <div className="mt-4 flex flex-1 flex-col gap-3">
-        <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
               key={card.id}
@@ -118,7 +119,7 @@ export const KanbanColumn = ({
             data-empty-column-zone={column.id}
             className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--stroke)] px-3 py-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]"
           >
-            Drop a card here
+            {filtered && column.cardIds.length ? "No matching cards" : "Drop a card here"}
           </div>
         )}
       </div>

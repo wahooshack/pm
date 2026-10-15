@@ -312,3 +312,37 @@ it("shows a future due date without the overdue warning", async () => {
   expect(within(card).getByText("Due Mar 1, 2999")).toBeInTheDocument();
   expect(within(card).getByText("low priority")).toBeInTheDocument();
 });
+
+it("filters cards by text, priority, label, assignee and overdue, and disables dragging while filtering", async () => {
+  board.cards["card-1"] = { ...board.cards["card-1"], priority: "high", labels: ["Bug"], assignee: "alice", dueDate: "2020-01-01" };
+  board.cards["card-6"] = { ...board.cards["card-6"], priority: "high", labels: ["UI"] };
+  render(<KanbanBoard boardId={1} />); await loaded();
+  expect(screen.getByRole("button", { name: "Drag Align roadmap themes" })).toBeEnabled();
+  await userEvent.type(screen.getByLabelText("Search cards"), "roadmap");
+  expect(screen.getAllByTestId(/^card-/)).toHaveLength(1);
+  expect(screen.getByText(/Showing 1 of 8 cards/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Drag Align roadmap themes" })).toBeDisabled();
+  expect(within(firstColumn()).getByText("1 of 2 cards")).toBeInTheDocument();
+  expect(within(screen.getByTestId("column-col-discovery")).getByText("No matching cards")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Delete column Discovery" })).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  expect(screen.getAllByTestId(/^card-/)).toHaveLength(8);
+  await userEvent.selectOptions(screen.getByLabelText("Filter by priority"), "high");
+  expect(screen.getAllByTestId(/^card-/).map(card => card.dataset.testid)).toEqual(["card-card-1", "card-card-6"]);
+  expect(within(screen.getByLabelText("Filter by label")).getAllByRole("option").map(o => o.textContent)).toEqual(["Any label", "Bug", "UI"]);
+  await userEvent.selectOptions(screen.getByLabelText("Filter by label"), "UI");
+  expect(screen.getAllByTestId(/^card-/).map(card => card.dataset.testid)).toEqual(["card-card-6"]);
+  await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  await userEvent.selectOptions(screen.getByLabelText("Filter by assignee"), "alice");
+  expect(screen.getAllByTestId(/^card-/)).toHaveLength(1);
+  await userEvent.selectOptions(screen.getByLabelText("Filter by assignee"), "__unassigned");
+  expect(screen.getAllByTestId(/^card-/)).toHaveLength(7);
+  await userEvent.selectOptions(screen.getByLabelText("Filter by assignee"), "");
+  await userEvent.click(screen.getByLabelText("Overdue only"));
+  expect(screen.getAllByTestId(/^card-/).map(card => card.dataset.testid)).toEqual(["card-card-1"]);
+
+  // Moving still works while filtered.
+  await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done"); await saved();
+  expect(board.columns[4].cardIds).toContain("card-1");
+});
