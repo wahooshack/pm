@@ -44,7 +44,7 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-const renderWorkspace = () => render(<Workspace user={demoUser} onLogout={vi.fn()} onSessionExpired={vi.fn()} />);
+const renderWorkspace = () => render(<Workspace user={demoUser} onUserChange={vi.fn()} onLogout={vi.fn()} onSessionExpired={vi.fn()} />);
 const boardSelect = () => screen.getByLabelText("Board");
 
 it("registers a new account and validates matching passwords", async () => {
@@ -196,4 +196,24 @@ it("does not offer sharing on boards the user does not own", async () => {
   await screen.findByLabelText("Board name");
   expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
   expect(screen.getByLabelText("Board name")).toBeEnabled();
+});
+
+it("switches between board, profile and admin views", async () => {
+  global.fetch = ((original) => vi.fn((input, init) => String(input) === "/api/admin/users"
+    ? Promise.resolve(response([demoUser])) : original(input, init)))(global.fetch) as typeof fetch;
+  renderWorkspace();
+  await screen.findByLabelText("Board name");
+  await userEvent.click(screen.getByRole("button", { name: "Profile" }));
+  expect(screen.getByRole("heading", { name: "@user" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("Board name")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Admin" }));
+  expect(await screen.findByRole("heading", { name: "Users" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Back to board" }));
+  expect(await screen.findByLabelText("Board name")).toBeInTheDocument();
+});
+
+it("hides the admin view from members", async () => {
+  render(<Workspace user={{ ...demoUser, isAdmin: false }} onUserChange={vi.fn()} onLogout={vi.fn()} onSessionExpired={vi.fn()} />);
+  await screen.findByLabelText("Board name");
+  expect(screen.queryByRole("button", { name: "Admin" })).not.toBeInTheDocument();
 });

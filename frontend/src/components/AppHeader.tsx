@@ -2,8 +2,12 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import type { BoardSummary } from "@/lib/kanban";
 import type { User } from "@/lib/api";
 
+export type View = "board" | "profile" | "admin";
+
 type AppHeaderProps = {
   user: User;
+  view: View;
+  onView: (view: View) => void;
   boards: BoardSummary[];
   currentId: number | null;
   busy: boolean;
@@ -17,7 +21,7 @@ type AppHeaderProps = {
 
 const pill = "rounded-full border border-[var(--stroke)] bg-white px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)] hover:text-[var(--primary-blue)]";
 
-export const AppHeader = ({ user, boards, currentId, busy, onSelect, onCreate, onDelete, onShare, onLogout, children }: AppHeaderProps) => {
+export const AppHeader = ({ user, view, onView, boards, currentId, busy, onSelect, onCreate, onDelete, onShare, onLogout, children }: AppHeaderProps) => {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const nameInput = useRef<HTMLInputElement>(null);
@@ -69,6 +73,13 @@ export const AppHeader = ({ user, boards, currentId, busy, onSelect, onCreate, o
         {children}
         <div className="ml-auto flex items-center gap-3">
           <span className="text-sm text-[var(--gray-text)]">Signed in as <strong className="text-[var(--navy-dark)]">{user.displayName}</strong></span>
+          <nav aria-label="Account" className="flex items-center gap-2">
+            {view !== "board" && <button type="button" onClick={() => onView("board")} className={pill}>Back to board</button>}
+            <button type="button" aria-current={view === "profile" ? "page" : undefined} onClick={() => onView("profile")} className={pill}>Profile</button>
+            {user.isAdmin && (
+              <button type="button" aria-current={view === "admin" ? "page" : undefined} onClick={() => onView("admin")} className={pill}>Admin</button>
+            )}
+          </nav>
           <button type="button" onClick={onLogout} className={pill}>Log out</button>
         </div>
       </div>

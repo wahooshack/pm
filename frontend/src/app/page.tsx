@@ -54,6 +54,6 @@ export default function Home() {
       <LoginForm onSubmit={handleLogin} onRegister={handleRegister} notice={notice} />
     </>;
   }
-  return <Workspace user={user} onLogout={() => void handleLogout()}
+  return <Workspace user={user} onUserChange={setUser} onLogout={() => void handleLogout()}
     onSessionExpired={(message) => { setNotice(message); setUser(null); setStatus("signed-out"); }} />;
 }

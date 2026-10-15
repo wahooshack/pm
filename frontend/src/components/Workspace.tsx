@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppHeader } from "@/components/AppHeader";
+import { AdminPanel } from "@/components/AdminPanel";
+import { AppHeader, type View } from "@/components/AppHeader";
+import { ProfilePanel } from "@/components/ProfilePanel";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { MembersPanel } from "@/components/MembersPanel";
 import { api, ApiError, type User } from "@/lib/api";
@@ -17,9 +19,10 @@ const writeLastBoard = (id: number) => {
   try { window.localStorage.setItem(LAST_BOARD_KEY, String(id)); } catch { /* storage unavailable */ }
 };
 
-type WorkspaceProps = { user: User; onLogout: () => void; onSessionExpired: (message: string) => void };
+type WorkspaceProps = { user: User; onUserChange: (user: User) => void; onLogout: () => void; onSessionExpired: (message: string) => void };
 
-export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) => {
+export const Workspace = ({ user, onUserChange, onLogout, onSessionExpired }: WorkspaceProps) => {
+  const [view, setView] = useState<View>("board");
   const [boards, setBoards] = useState<BoardSummary[] | null>(null);
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +36,7 @@ export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) 
   const sessionExpired = useCallback(() => expired.current("Your session expired. Sign in again."), []);
 
   const select = (id: number | null) => {
-    setCurrentId(id); setSharing(false);
+    setCurrentId(id); setSharing(false); setView("board");
     if (id) writeLastBoard(id);
   };
 
@@ -86,7 +89,7 @@ export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) 
 
   return (
     <div className="min-h-screen">
-      <AppHeader user={user} boards={boards ?? []} currentId={currentId} busy={busy || !boards}
+      <AppHeader user={user} view={view} onView={next => { setView(next); setSharing(false); }} boards={boards ?? []} currentId={currentId} busy={busy || !boards}
         onSelect={select} onCreate={name => void createBoard(name)} onDelete={deleteBoard} onShare={() => setSharing(true)} onLogout={onLogout} />
       {sharing && currentId !== null && (
         <MembersPanel boardId={currentId} boardName={boards?.find(board => board.id === currentId)?.name ?? ""}
@@ -101,11 +104,13 @@ export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) 
           </p>
         </div>
       )}
-      {!boards && !error && <p role="status" className="p-8">Loading boards...</p>}
-      {boards && currentId === null && (
+      {view === "profile" && <ProfilePanel user={user} onUserChange={onUserChange} onSessionExpired={sessionExpired} />}
+      {view === "admin" && user.isAdmin && <AdminPanel user={user} onSessionExpired={sessionExpired} />}
+      {view === "board" && !boards && !error && <p role="status" className="p-8">Loading boards...</p>}
+      {view === "board" && boards && currentId === null && (
         <p className="mx-auto max-w-[1800px] px-6 py-12 text-[var(--gray-text)]">You have no boards yet. Create one with New board.</p>
       )}
-      {currentId !== null && (
+      {view === "board" && currentId !== null && (
         <KanbanBoard key={`${currentId}-${boardVersion}`} boardId={currentId} onBoardRenamed={renamed} onSessionExpired={onSessionExpired} />
       )}
     </div>
