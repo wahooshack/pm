@@ -11,14 +11,15 @@ import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, moveCard, type BoardData } from "@/lib/kanban";
 import { api, ApiError } from "@/lib/api";
 
-type KanbanBoardProps = { onLogout?: () => void; onSessionExpired?: (message: string) => void };
+type KanbanBoardProps = { boardId: number; onBoardRenamed?: (name: string) => void; onSessionExpired?: (message: string) => void };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 const pointerWithinOrClosestCorners: CollisionDetection = (args) => {
   const collisions = pointerWithin(args);
   return collisions.length ? collisions : closestCorners(args);
 };
 
-export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) => {
+export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: KanbanBoardProps) => {
+  const boardUrl = `/api/boards/${boardId}`;
   const [board, setBoard] = useState<BoardData | null>(null);
   const [conversation, setConversation] = useState<ChatMessage[]>([]);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -41,7 +42,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
     requestController.current = controller;
     async function load() {
       try {
-        const data = await api<BoardData>("/api/board", undefined, controller.signal);
+        const data = await api<BoardData>(boardUrl, undefined, controller.signal);
         if (!controller.signal.aborted) {
           setBoard(data); setError(null); setUnsaved(null); setConflict(false);
         }
@@ -56,13 +57,14 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
     }
     void load();
     return () => controller.abort();
-  }, [loadAttempt]);
+  }, [loadAttempt, boardUrl]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
-  const disabled = isLoading || isSaving || isAiBusy || !!unsaved || conflict;
+  const readOnly = board?.role === "viewer";
+  const disabled = isLoading || isSaving || isAiBusy || !!unsaved || conflict || readOnly;
   // An open editor holds a copy of its card, so the assistant must not change the board underneath it.
   const editorOpen = !!(editingCardId && board?.cards[editingCardId]);
   const aiDisabled = disabled || editorOpen;
@@ -81,9 +83,10 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
     setBoard(next);
     const signal = requestController.current?.signal;
     try {
-      const saved = await api<BoardData>("/api/board", { board: next }, signal);
+      const saved = await api<BoardData>(boardUrl, { board: next }, signal);
       if (!signal?.aborted) {
         setBoard(saved); setUnsaved(null); setError(null);
+        if (saved.name !== board?.name) onBoardRenamed?.(saved.name);
         if (focusId) requestAnimationFrame(() => {
           if (!signal?.aborted) document.getElementById(focusId)?.focus();
         });
@@ -108,6 +111,10 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
     const placeAfter = !!dragged && dragged.top + dragged.height / 2 > over.rect.top + over.rect.height / 2;
     void saveBoard({ ...board, columns: moveCard(board.columns, String(active.id), String(over.id), placeAfter) }, `drag-${active.id}`);
   };
+  const handleRenameBoard = (name: string) => {
+    if (!board || disabled || busy.current) return;
+    void saveBoard({ ...board, name });
+  };
   const handleRenameColumn = (id: string, title: string) => {
     if (!board || disabled || busy.current) return;
     void saveBoard({ ...board, columns: board.columns.map(c => c.id === id ? { ...c, title } : c) });
@@ -115,7 +122,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
   const handleAddCard = (columnId: string, title: string, details: string) => {
     if (!board || disabled || busy.current) return;
     const id = createId("card");
-    void saveBoard({ ...board, cards: { ...board.cards, [id]: { id, title, details } },
+    void saveBoard({ ...board, cards: { ...board.cards, [id]: { id, title, details, dueDate: null, priority: null, labels: [], assignee: null } },
       columns: board.columns.map(c => c.id === columnId ? { ...c, cardIds: [...c.cardIds, id] } : c) });
   };
   const handleEditCard = (id: string, title: string, details: string) => {
@@ -143,7 +150,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
     setConversation(nextConversation); setAiPrompt("");
     const signal = requestController.current?.signal;
     try {
-      const result = await api<{ response: string; board: BoardData }>("/api/ai", {
+      const result = await api<{ response: string; board: BoardData }>(`${boardUrl}/ai`, {
         prompt, revision: board.revision,
         conversation: conversation.slice(-20).map(({ role, content }) => ({ role, content })),
       }, signal);
@@ -166,7 +173,6 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
 
   if (!board) {
     return <main className="p-8">
-      {onLogout && <button onClick={onLogout}>Log out</button>}
       {isLoading ? <p role="status">Loading board...</p> : <><p role="alert">{error}</p><button onClick={reload}>Retry loading board</button></>}
     </main>;
   }
@@ -177,53 +183,31 @@ export const KanbanBoard = ({ onLogout, onSessionExpired }: KanbanBoardProps) =>
       <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                Kanban Studio
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                  Focus
-                </p>
-                <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                  One board. Five columns. Zero clutter.
-                </p>
-              </div>
-              {onLogout ? (
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  className="rounded-full border border-[var(--stroke)] bg-white px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)] hover:text-[var(--primary-blue)]"
-                >
-                  Log out
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
-              </div>
-            ))}
-          </div>
-        </header>
+      <main className="relative mx-auto flex max-w-[1500px] flex-col gap-6 px-6 pb-16 pt-8">
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            key={board.name}
+            defaultValue={board.name}
+            disabled={disabled}
+            maxLength={100}
+            aria-label="Board name"
+            onBlur={(event) => {
+              const name = event.target.value.trim();
+              if (name && name !== board.name) handleRenameBoard(name);
+              else event.target.value = board.name;
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") event.currentTarget.value = board.name;
+              if (event.key === "Enter" || event.key === "Escape") event.currentTarget.blur();
+            }}
+            className="min-w-0 flex-1 bg-transparent font-display text-3xl font-semibold text-[var(--navy-dark)] outline-none disabled:cursor-default disabled:opacity-100"
+          />
+          {readOnly && (
+            <span className="rounded-full border border-[var(--stroke)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+              View only
+            </span>
+          )}
+        </div>
 
         {error ? (
           <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

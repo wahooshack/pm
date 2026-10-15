@@ -1,7 +1,13 @@
+export type Priority = "low" | "medium" | "high";
+
 export type Card = {
   id: string;
   title: string;
   details: string;
+  dueDate: string | null;
+  priority: Priority | null;
+  labels: string[];
+  assignee: string | null;
 };
 
 export type Column = {
@@ -10,11 +16,18 @@ export type Column = {
   cardIds: string[];
 };
 
+export type Role = "owner" | "editor" | "viewer";
+
 export type BoardData = {
+  id: number;
+  name: string;
+  role: Role;
   revision: number;
   columns: Column[];
   cards: Record<string, Card>;
 };
+
+export type BoardSummary = { id: number; name: string; role: Role; owner: string };
 
 const isColumnId = (columns: Column[], id: string) =>
   columns.some(

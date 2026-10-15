@@ -21,3 +21,26 @@ def client(tmp_path, monkeypatch):
 def signed_in(client):
     assert client.post("/api/login", json={"username": "user", "password": "password"}).status_code == 200
     return client
+
+
+@pytest.fixture
+def board_id(signed_in):
+    return signed_in.get("/api/boards").json()[0]["id"]
+
+
+@pytest.fixture
+def new_user(client):
+    """Registers a user in its own cookie jar against the same database."""
+    clients = []
+
+    def register(username: str, password: str = "secret-pass"):
+        other = TestClient(app)
+        clients.append(other)
+        response = other.post("/api/register", json={"username": username, "displayName": username.title(),
+                                                     "password": password})
+        assert response.status_code == 200, response.text
+        return other
+
+    yield register
+    for other in clients:
+        other.close()

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import Home from "@/app/page";
 import type { BoardData } from "@/lib/kanban";
-import { initialData } from "@/test/fixtures";
+import { demoUser, initialData } from "@/test/fixtures";
 
 const response = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body } as Response);
 const deferred = <T,>() => {
@@ -21,31 +21,37 @@ beforeEach(() => {
   vi.spyOn(window, "confirm").mockReturnValue(true);
   global.fetch = vi.fn(async (input, init) => {
     const path = String(input);
-    if (path === "/api/session") return signedIn ? response({ username: "user" }) : response({ detail: "Please sign in." }, 401);
+    if (path === "/api/session") return signedIn ? response(demoUser) : response({ detail: "Please sign in." }, 401);
     if (path === "/api/login") {
       const payload = JSON.parse(String(init?.body));
       if (payload.username !== "user" || payload.password !== "password") return response({ detail: "Incorrect username or password." }, 401);
-      signedIn = true; return response({ username: "user" });
+      signedIn = true; return response(demoUser);
     }
     if (path === "/api/logout") { signedIn = false; return response({ ok: true }); }
-    if (path === "/api/board" && init?.method === "POST") {
+    if (path === "/api/boards") return response([{ id: 1, name: board.name, role: "owner", owner: "user" }]);
+    if (path === "/api/boards/1" && init?.method === "POST") {
       posts++; board = { ...JSON.parse(String(init.body)).board, revision: board.revision + 1 };
       return response(board);
     }
     return response(board);
   }) as typeof fetch;
 });
-const loaded = async () => { await screen.findByRole("heading", { name: "Kanban Studio" }); };
+const loaded = async () => { await screen.findByLabelText("Board name"); };
+const signIn = async (password = "password") => {
+  await userEvent.type(screen.getByLabelText("Username"), "user");
+  await userEvent.type(screen.getByLabelText("Password"), password);
+  await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+};
 const firstColumn = () => screen.getAllByTestId(/column-/)[0];
 const saved = async () => { await waitFor(() => expect(screen.queryByText("Saving board...")).not.toBeInTheDocument()); };
 
 it("renders the authoritative five columns", async () => {
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   expect(screen.getAllByTestId(/column-/)).toHaveLength(5);
 });
 
 it("commits a rename on blur rather than on each keystroke", async () => {
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   const input = within(firstColumn()).getByRole("textbox", { name: /Column title:/ });
   await userEvent.clear(input); await userEvent.type(input, "New name");
   expect(posts).toBe(0);
@@ -54,7 +60,7 @@ it("commits a rename on blur rather than on each keystroke", async () => {
 });
 
 it("adds, edits, clears details, and deletes a card without AI", async () => {
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   const column = firstColumn();
   await userEvent.click(within(column).getByRole("button", { name: "Add a card" }));
   await userEvent.type(within(column).getByLabelText("New card title"), "New card");
@@ -71,14 +77,14 @@ it("adds, edits, clears details, and deletes a card without AI", async () => {
 
 it("keeps a card when removal is not confirmed", async () => {
   vi.mocked(window.confirm).mockReturnValue(false);
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.click(screen.getByRole("button", { name: "Delete Align roadmap themes" }));
   expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("Align roadmap themes"));
   expect(posts).toBe(0); expect(screen.getByText("Align roadmap themes")).toBeInTheDocument();
 });
 
 it("cancels card edits without saving", async () => {
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.click(screen.getByRole("button", { name: "Edit Align roadmap themes" }));
   await userEvent.clear(screen.getByLabelText("Card title"));
   await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -86,7 +92,7 @@ it("cancels card edits without saving", async () => {
 });
 
 it("disables the assistant while a card editor is open", async () => {
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.type(screen.getByLabelText("Message to board assistant"), "Rename first card");
   await userEvent.click(screen.getByRole("button", { name: "Edit Align roadmap themes" }));
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -97,7 +103,7 @@ it("disables the assistant while a card editor is open", async () => {
 });
 
 it("offers movement without requiring a pointer drag", async () => {
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done"); await saved();
   expect(board.columns[4].cardIds).toContain("card-1");
   await waitFor(() => expect(screen.getByLabelText("Move Align roadmap themes to column")).toHaveFocus());
@@ -105,7 +111,7 @@ it("offers movement without requiring a pointer drag", async () => {
 
 it("does not expose seed data while loading or after a load failure", async () => {
   const pending = deferred<Response>(); global.fetch = vi.fn(() => pending.promise);
-  render(<KanbanBoard />);
+  render(<KanbanBoard boardId={1} />);
   expect(screen.getByRole("status")).toHaveTextContent("Loading board");
   expect(screen.queryByText("Align roadmap themes")).not.toBeInTheDocument();
   await act(async () => pending.resolve(response({ detail: "offline" }, 503)));
@@ -118,7 +124,7 @@ it("does not expose seed data while loading or after a load failure", async () =
 it("prevents overlapping saves while a write is pending", async () => {
   const pending = deferred<Response>(); const original = global.fetch;
   global.fetch = vi.fn((input, init) => init?.method === "POST" ? pending.promise : original(input, init));
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done");
   expect(screen.getByLabelText("Move Gather customer signals to column")).toBeDisabled();
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -131,7 +137,7 @@ it("prevents overlapping saves while a write is pending", async () => {
 it("retains a failed edit for explicit retry", async () => {
   const original = global.fetch; let fail = true;
   global.fetch = vi.fn((input, init) => init?.method === "POST" && fail ? Promise.resolve(response({ detail: "Save unavailable" }, 503)) : original(input, init));
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done");
   await screen.findByRole("button", { name: "Retry save" });
   expect(screen.getByLabelText("Move Align roadmap themes to column")).toBeDisabled();
@@ -143,7 +149,7 @@ it("retains a failed edit for explicit retry", async () => {
 it("requires reload after a revision conflict rather than overwriting it", async () => {
   const original = global.fetch;
   global.fetch = vi.fn((input, init) => init?.method === "POST" ? Promise.resolve(response({ detail: "Board changed. Reload." }, 409)) : original(input, init));
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done");
   await screen.findByRole("alert");
   expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
@@ -153,12 +159,12 @@ it("requires reload after a revision conflict rather than overwriting it", async
 
 it("uses the server-committed AI board and blocks intervening manual edits", async () => {
   const original = global.fetch; const pending = deferred<Response>();
-  global.fetch = vi.fn((input, init) => String(input) === "/api/ai" ? pending.promise : original(input, init));
-  render(<KanbanBoard />); await loaded();
+  global.fetch = vi.fn((input, init) => String(input) === "/api/boards/1/ai" ? pending.promise : original(input, init));
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.type(screen.getByLabelText("Message to board assistant"), "Move first card");
   await userEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(screen.getByRole("button", { name: "Edit Align roadmap themes" })).toBeDisabled();
-  const request = vi.mocked(global.fetch).mock.calls.find(([path]) => path === "/api/ai");
+  const request = vi.mocked(global.fetch).mock.calls.find(([path]) => path === "/api/boards/1/ai");
   expect(JSON.parse(String(request?.[1]?.body))).toEqual({ prompt: "Move first card", revision: 0, conversation: [] });
   const next = structuredClone(board); next.revision = 1; next.columns[0].cardIds = ["card-2"]; next.columns[4].cardIds.push("card-1");
   await act(async () => pending.resolve(response({ response: "Moved", board: next })));
@@ -168,8 +174,8 @@ it("uses the server-committed AI board and blocks intervening manual edits", asy
 
 it("aborts in-flight AI on unmount and never follows it with a save", async () => {
   const original = global.fetch; const pending = deferred<Response>(); let signal: AbortSignal | undefined;
-  global.fetch = vi.fn((input, init) => { if (String(input) === "/api/ai") { signal = init?.signal as AbortSignal; return pending.promise; } return original(input, init); });
-  const { unmount } = render(<KanbanBoard />); await loaded();
+  global.fetch = vi.fn((input, init) => { if (String(input) === "/api/boards/1/ai") { signal = init?.signal as AbortSignal; return pending.promise; } return original(input, init); });
+  const { unmount } = render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.type(screen.getByLabelText("Message to board assistant"), "Delete first");
   await userEvent.click(screen.getByRole("button", { name: "Send" })); unmount();
   expect(signal?.aborted).toBe(true);
@@ -181,11 +187,10 @@ it("ignores browser storage as authorization and validates login on the server",
   window.sessionStorage.setItem("kanban-demo-auth", "authenticated");
   render(<Home />);
   await screen.findByRole("heading", { name: "Sign in" });
-  await userEvent.clear(screen.getByLabelText("Password")); await userEvent.type(screen.getByLabelText("Password"), "wrong");
-  await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  await signIn("wrong");
   expect(await screen.findByText("Incorrect username or password.")).toBeInTheDocument();
-  await userEvent.clear(screen.getByLabelText("Password")); await userEvent.type(screen.getByLabelText("Password"), "password");
-  await userEvent.click(screen.getByRole("button", { name: "Sign in" })); await loaded();
+  await userEvent.clear(screen.getByLabelText("Username")); await userEvent.clear(screen.getByLabelText("Password"));
+  await signIn(); await loaded();
 });
 
 it("restores and logs out a server session", async () => {
@@ -196,19 +201,19 @@ it("restores and logs out a server session", async () => {
 
 it("explains on the sign-in screen that an expired session dropped the edit", async () => {
   signedIn = true; const original = global.fetch;
-  global.fetch = vi.fn((input, init) => init?.method === "POST" && String(input) === "/api/board"
+  global.fetch = vi.fn((input, init) => init?.method === "POST" && String(input) === "/api/boards/1"
     ? Promise.resolve(response({ detail: "Please sign in." }, 401)) : original(input, init));
   render(<Home />); await loaded();
   await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done");
   await screen.findByRole("heading", { name: "Sign in" });
   expect(screen.getByRole("alert")).toHaveTextContent("your last change was not saved");
-  await userEvent.click(screen.getByRole("button", { name: "Sign in" })); await loaded();
+  await signIn(); await loaded();
   expect(screen.queryByText(/your last change was not saved/)).not.toBeInTheDocument();
 });
 
 it("explains on the sign-in screen that an expired session dropped the assistant's changes", async () => {
   signedIn = true; const original = global.fetch;
-  global.fetch = vi.fn((input, init) => String(input) === "/api/ai"
+  global.fetch = vi.fn((input, init) => String(input) === "/api/boards/1/ai"
     ? Promise.resolve(response({ detail: "Please sign in." }, 401)) : original(input, init));
   render(<Home />); await loaded();
   await userEvent.type(screen.getByLabelText("Message to board assistant"), "Move first card");
@@ -220,11 +225,11 @@ it("explains on the sign-in screen that an expired session dropped the assistant
 it("does not duplicate a failed assistant message when it is retried", async () => {
   const original = global.fetch; let fail = true; const bodies: unknown[] = [];
   global.fetch = vi.fn((input, init) => {
-    if (String(input) !== "/api/ai") return original(input, init);
+    if (String(input) !== "/api/boards/1/ai") return original(input, init);
     bodies.push(JSON.parse(String(init?.body)));
     return Promise.resolve(fail ? response({ detail: "Assistant unavailable" }, 502) : response({ response: "Moved it", board }));
   });
-  render(<KanbanBoard />); await loaded();
+  render(<KanbanBoard boardId={1} />); await loaded();
   await userEvent.type(screen.getByLabelText("Message to board assistant"), "Move first card");
   await userEvent.click(screen.getByRole("button", { name: "Send" }));
   await screen.findByText("Assistant unavailable");
@@ -239,7 +244,7 @@ it("does not duplicate a failed assistant message when it is retried", async () 
 
 it("treats a non-JSON 401 as session expiry", async () => {
   signedIn = true; const original = global.fetch;
-  global.fetch = vi.fn((input, init) => init?.method === "POST" && String(input) === "/api/board"
+  global.fetch = vi.fn((input, init) => init?.method === "POST" && String(input) === "/api/boards/1"
     ? Promise.resolve({ ok: false, status: 401, json: async () => { throw new SyntaxError("Unexpected token <"); } } as unknown as Response)
     : original(input, init));
   render(<Home />); await loaded();
