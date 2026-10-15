@@ -46,4 +46,6 @@ Approved October 15, 2026: user management with an admin role, multiple boards, 
 - [x] 7. Profile and admin screens.
 - [x] 8. Assistant notes for new actions and viewers; browser test for assistant card fields; fixed a two-tab test race exposed by the new header.
 - [x] 9. Documentation (AGENTS.md business rules, CLAUDE.md, area guides, READMEs, DATABASE.md, kanban-schema.json with a consistency test). Coverage: backend 98%, frontend 94.6% lines.
-- [ ] 10. Review pass, Docker build and run check, screenshots.
+- [x] 10. Review pass (fixed stale board names in the switcher), migration verified on a copy of the real database, Docker build and run on live data, screenshots.
+
+Final checks on `feature/pm-buildout`: backend 88 tests (98% coverage), frontend 66 unit tests (94.6% lines), 18 browser tests, lint and TypeScript clean.
