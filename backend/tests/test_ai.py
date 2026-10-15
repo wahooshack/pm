@@ -220,3 +220,59 @@ def test_provider_reply_cut_off_at_token_limit_is_reported(monkeypatch):
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response))))
     with pytest.raises(AssistantReplyTooLong):
         asyncio.run(call_openrouter("hi"))
+
+
+def full_card(card_id, **fields):
+    return {"id": card_id, "title": "T", "details": "", "dueDate": None, "priority": None, "labels": [], "assignee": None, **fields}
+
+
+def test_set_card_fields_validates_each_field():
+    from backend.app.ai import apply_board_actions
+    board = make_board()
+    board["cards"]["card-1"] = full_card("card-1", priority="low", labels=["Old"])
+    actions = [
+        {"type": "set_card_fields", "cardId": "card-1", "dueDate": "2026-02-30"},
+        {"type": "set_card_fields", "cardId": "card-1", "labels": "a, A"},
+        {"type": "set_card_fields", "cardId": "card-1", "labels": "x" * 31},
+        {"type": "set_card_fields", "cardId": "card-1", "assignee": "mallory"},
+        {"type": "set_card_fields", "cardId": "missing", "priority": "high"},
+        {"type": "set_card_fields", "cardId": "card-1"},
+        {"type": "set_card_fields", "cardId": "card-1", "priority": 3},
+        {"type": "set_card_fields", "cardId": "card-1", "dueDate": "2026-03-01", "assignee": "alice", "labels": " Bug ,UI,"},
+        {"type": "set_card_fields", "cardId": "card-1", "priority": ""},
+    ]
+    applied, rejected = [], []
+    changed = apply_board_actions(board, actions, applied, rejected, participants=["alice"])
+    assert len(applied) == 2 and len(rejected) == 7
+    assert changed["cards"]["card-1"] == full_card("card-1", dueDate="2026-03-01", assignee="alice", labels=["Bug", "UI"])
+    assert board["cards"]["card-1"]["labels"] == ["Old"]
+
+
+def test_column_actions_respect_limits():
+    from backend.app.ai import apply_board_actions
+    from backend.app.models import MAX_COLUMNS
+    board = make_board()
+    applied, rejected = [], []
+    changed = apply_board_actions(board, [
+        {"type": "delete_column", "columnId": "col-backlog"},
+        {"type": "delete_column", "columnId": "col-missing"},
+        {"type": "delete_column", "columnId": "col-done"},
+        {"type": "add_column", "title": "Blocked"},
+        {"type": "add_column", "title": " "},
+    ], applied, rejected)
+    assert [column["title"] for column in changed["columns"]] == ["Backlog", "Blocked"]
+    assert len(applied) == 2 and len(rejected) == 3
+    only = {"columns": [{"id": "col-a", "title": "A", "cardIds": []}], "cards": {}}
+    assert apply_board_actions(only, [{"type": "delete_column", "columnId": "col-a"}], [], []) == only
+    full = {"columns": [{"id": f"col-{i}", "title": "C", "cardIds": []} for i in range(MAX_COLUMNS)], "cards": {}}
+    rejected = []
+    apply_board_actions(full, [{"type": "add_column", "title": "One more"}], [], rejected)
+    assert len(rejected) == 1
+
+
+def test_prompt_lists_new_actions_and_assignable_users():
+    from backend.app.ai import build_board_prompt
+    prompt = build_board_prompt(make_board(), "Assign it", [], ["alice", "user"])
+    for text in ("set_card_fields", "add_column", "delete_column", "Assignable usernames: alice, user"):
+        assert text in prompt
+    assert "Assignable usernames: none" in build_board_prompt(make_board(), "hi", [])

@@ -346,3 +346,10 @@ it("filters cards by text, priority, label, assignee and overdue, and disables d
   await userEvent.selectOptions(screen.getByLabelText("Move Align roadmap themes to column"), "col-done"); await saved();
   expect(board.columns[4].cardIds).toContain("card-1");
 });
+
+it("tells viewers the assistant cannot change the board", async () => {
+  board.role = "viewer";
+  render(<KanbanBoard boardId={1} />); await loaded();
+  expect(screen.getByText(/view-only access, so the assistant cannot change this board/)).toBeInTheDocument();
+  expect(screen.getByLabelText("Message to board assistant")).toBeDisabled();
+});

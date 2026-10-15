@@ -10,8 +10,14 @@ import uvicorn
 
 async def fake_provider(prompt, model=None):
     await asyncio.sleep(0.3)
-    return {"model": "integration-mock", "content": json.dumps({"message": "Moved the card to Done.",
-        "actions": [{"type": "move_card", "cardId": "card-1", "columnId": "col-done"}]})}
+    request = prompt.split("User request:\n", 1)[1].split("\n\n", 1)[0].lower()
+    if "priority" in request:
+        reply = {"message": "Marked the card as high priority.", "actions": [
+            {"type": "set_card_fields", "cardId": "card-1", "priority": "high", "labels": "Assistant", "assignee": "user"}]}
+    else:
+        reply = {"message": "Moved the card to Done.",
+                 "actions": [{"type": "move_card", "cardId": "card-1", "columnId": "col-done"}]}
+    return {"model": "integration-mock", "content": json.dumps(reply)}
 
 
 if __name__ == "__main__":

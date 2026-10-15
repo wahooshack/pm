@@ -20,3 +20,15 @@ test("sets card fields, shows them on the card and persists them", async ({ page
   expect((await getBoard(page.request)).cards["card-1"]).toMatchObject(
     { dueDate: "2020-01-15", priority: "high", labels: ["Bug", "Frontend"], assignee: "user" });
 });
+
+test("the assistant sets card fields through the board-scoped API", async ({ page }) => {
+  await signIn(page);
+  await page.getByLabel("Message to board assistant").fill("Make the roadmap card high priority");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByRole("log")).toContainText("Marked the card as high priority.");
+  const card = page.getByTestId("card-card-1");
+  await expect(card.getByText("high priority")).toBeVisible();
+  await expect(card.getByText("Assistant")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("card-card-1").getByLabel("Assigned to user")).toBeVisible();
+});

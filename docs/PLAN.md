@@ -44,6 +44,6 @@ Approved October 15, 2026: user management with an admin role, multiple boards, 
 - [x] 5. Sharing UI (members panel, roles) and viewer read-only checks in the browser.
 - [x] 6. Search and filter (dragging is disabled while a filter is active; "Move to" still works).
 - [x] 7. Profile and admin screens.
-- [ ] 8. Assistant UI notes for new actions; browser test for the board-scoped assistant.
+- [x] 8. Assistant notes for new actions and viewers; browser test for assistant card fields; fixed a two-tab test race exposed by the new header.
 - [ ] 9. Documentation (AGENTS.md business rules, CLAUDE.md, DATABASE.md, kanban-schema.json) and coverage gaps.
 - [ ] 10. Review pass, Docker build and run check, screenshots.

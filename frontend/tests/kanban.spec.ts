@@ -112,7 +112,7 @@ test("assistant commits through the real API and survives reload", async ({ page
 test("another tab cannot overwrite a newer board", async ({ page, context }) => {
   await signIn(page);
   const other = await context.newPage(); await other.goto("/");
-  await expect(other.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  await expect(other.getByTestId("column-col-backlog").getByTestId("card-card-1")).toBeVisible();
   await page.getByLabel("Move Align roadmap themes to column").selectOption("col-done"); await waitSaved(page);
   const title = other.getByLabel("Column title: Backlog", { exact: true });
   await title.fill("Stale tab rename"); await title.press("Enter");
@@ -125,7 +125,7 @@ test("another tab cannot overwrite a newer board", async ({ page, context }) => 
 test("a delayed assistant cannot overwrite another tab's manual edit", async ({ page, context }) => {
   await signIn(page);
   const other = await context.newPage(); await other.goto("/");
-  await expect(other.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  await expect(other.getByTestId("column-col-backlog").getByTestId("card-card-1")).toBeVisible();
   const started = page.waitForRequest(r => r.url().endsWith("/ai"));
   await page.getByLabel("Message to board assistant").fill("Move first card");
   await page.getByRole("button", { name: "Send", exact: true }).click(); await started;

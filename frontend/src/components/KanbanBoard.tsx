@@ -317,6 +317,11 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
               <h2 className="mt-2 font-display text-2xl font-semibold text-[var(--navy-dark)]">
                 Board help
               </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
+                {readOnly
+                  ? "You have view-only access, so the assistant cannot change this board."
+                  : "Ask to add, move, rename or delete cards, set due dates, priorities, labels and assignees, or add and remove empty columns."}
+              </p>
             </div>
 
             <div
