@@ -15,14 +15,15 @@ import { todayIso } from "@/lib/cards";
 import { createId, MAX_COLUMNS, moveCard, shiftColumn, type BoardData } from "@/lib/kanban";
 import { api, ApiError } from "@/lib/api";
 
-type KanbanBoardProps = { boardId: number; onBoardRenamed?: (name: string) => void; onSessionExpired?: (message: string) => void };
+// onName reports the authoritative board name after every load and commit, so the board list stays current.
+type KanbanBoardProps = { boardId: number; onName?: (name: string) => void; onSessionExpired?: (message: string) => void };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 const pointerWithinOrClosestCorners: CollisionDetection = (args) => {
   const collisions = pointerWithin(args);
   return collisions.length ? collisions : closestCorners(args);
 };
 
-export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: KanbanBoardProps) => {
+export const KanbanBoard = ({ boardId, onName, onSessionExpired }: KanbanBoardProps) => {
   const boardUrl = `/api/boards/${boardId}`;
   const [board, setBoard] = useState<BoardData | null>(null);
   const [conversation, setConversation] = useState<ChatMessage[]>([]);
@@ -42,6 +43,8 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
   const busy = useRef(false);
   const expired = useRef(onSessionExpired);
   useEffect(() => { expired.current = onSessionExpired; }, [onSessionExpired]);
+  const reportName = useRef(onName);
+  useEffect(() => { reportName.current = onName; }, [onName]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -54,6 +57,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
         ]);
         if (!controller.signal.aborted) {
           setBoard(data); setParticipants(people); setError(null); setUnsaved(null); setConflict(false);
+          reportName.current?.(data.name);
         }
       } catch (cause) {
         if (!controller.signal.aborted) {
@@ -95,7 +99,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
       const saved = await api<BoardData>(boardUrl, { board: next }, signal);
       if (!signal?.aborted) {
         setBoard(saved); setUnsaved(null); setError(null);
-        if (saved.name !== board?.name) onBoardRenamed?.(saved.name);
+        reportName.current?.(saved.name);
         if (focusId) requestAnimationFrame(() => {
           if (!signal?.aborted) document.getElementById(focusId)?.focus();
         });
@@ -177,6 +181,7 @@ export const KanbanBoard = ({ boardId, onBoardRenamed, onSessionExpired }: Kanba
       }, signal);
       if (!signal?.aborted) {
         setBoard(result.board);
+        reportName.current?.(result.board.name);
         setConversation(current => [...current, { id: createId("chat"), role: "assistant", content: result.response }]);
       }
     } catch (cause) {

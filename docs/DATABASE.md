@@ -4,7 +4,7 @@ SQLite holds users, boards, board members, ordered columns and cards, and expiri
 
 ## Users and sessions
 
-`users` stores a unique lowercase username, display name, an scrypt password hash (`scrypt$<salt>$<hash>`, stdlib `hashlib.scrypt`, per-user salt), `is_admin` and `is_active`. Registration creates a user with one empty board. The demo account `user` / `password` is created (or migrated) as an admin with the sample board.
+`users` stores a unique lowercase username, display name, an scrypt password hash (`scrypt$<salt>$<hash>`, stdlib `hashlib.scrypt`, per-user salt), `is_admin` and `is_active`. Registration creates a user with one empty board. The demo account `user` / `password` is created (or migrated) as an admin with the sample board. Other users carried over from older databases have no password and cannot sign in until an admin resets it.
 
 `sessions` stores SHA-256 hashes of random opaque tokens, the user and an expiry eight hours ahead. The browser receives an HttpOnly, SameSite=Strict cookie; logout deletes the server token. Sessions of disabled users are ignored. Disabling a user or an admin password reset deletes all of that user's sessions; a user's own password change deletes their other sessions.
 

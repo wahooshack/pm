@@ -217,3 +217,19 @@ it("hides the admin view from members", async () => {
   await screen.findByLabelText("Board name");
   expect(screen.queryByRole("button", { name: "Admin" })).not.toBeInTheDocument();
 });
+
+it("keeps the board list name current after loads and retried renames", async () => {
+  boards[1].name = "Renamed elsewhere";
+  const original = global.fetch; let failSave = true;
+  global.fetch = vi.fn((input, init) => String(input) === "/api/boards/1" && init?.method === "POST" && failSave
+    ? Promise.resolve(response({ detail: "Save unavailable" }, 503)) : original(input, init)) as typeof fetch;
+  renderWorkspace();
+  await waitFor(() => expect(within(boardSelect()).getByRole("option", { name: "Renamed elsewhere" })).toBeInTheDocument());
+  const name = screen.getByLabelText("Board name");
+  await userEvent.clear(name); await userEvent.type(name, "Retried name{Enter}");
+  await userEvent.click(await screen.findByRole("button", { name: "Retry save" }));
+  expect(within(boardSelect()).getByRole("option", { name: "Renamed elsewhere" })).toBeInTheDocument();
+  failSave = false;
+  await userEvent.click(await screen.findByRole("button", { name: "Retry save" }));
+  await waitFor(() => expect(within(boardSelect()).getByRole("option", { name: "Retried name" })).toBeInTheDocument());
+});

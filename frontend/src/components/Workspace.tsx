@@ -85,7 +85,8 @@ export const Workspace = ({ user, onUserChange, onLogout, onSessionExpired }: Wo
   };
 
   const renamed = (name: string) =>
-    setBoards(current => current?.map(board => board.id === currentId ? { ...board, name } : board) ?? null);
+    setBoards(current => current?.some(board => board.id === currentId && board.name !== name)
+      ? current.map(board => board.id === currentId ? { ...board, name } : board) : current);
 
   return (
     <div className="min-h-screen">
@@ -111,7 +112,7 @@ export const Workspace = ({ user, onUserChange, onLogout, onSessionExpired }: Wo
         <p className="mx-auto max-w-[1800px] px-6 py-12 text-[var(--gray-text)]">You have no boards yet. Create one with New board.</p>
       )}
       {view === "board" && currentId !== null && (
-        <KanbanBoard key={`${currentId}-${boardVersion}`} boardId={currentId} onBoardRenamed={renamed} onSessionExpired={onSessionExpired} />
+        <KanbanBoard key={`${currentId}-${boardVersion}`} boardId={currentId} onName={renamed} onSessionExpired={onSessionExpired} />
       )}
     </div>
   );

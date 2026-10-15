@@ -92,3 +92,12 @@ def test_schema_document_matches_the_database(client):
         for table in documented["tables"]:
             columns = [row["name"] for row in connection.execute(f"PRAGMA table_info({table['name']})")]
             assert [column["name"] for column in table["columns"]] == columns
+
+
+def test_migrated_user_without_password_needs_an_admin_reset(client):
+    with database.get_connection() as connection:
+        connection.execute("INSERT INTO users (username, display_name) VALUES ('legacy', 'Legacy')")
+    assert database.authenticate("legacy", "") is None
+    admin = database.authenticate("user", "password")
+    database.admin_update_user(admin["id"], "legacy", None, None, "fresh-pass1")
+    assert database.authenticate("legacy", "fresh-pass1")["username"] == "legacy"
