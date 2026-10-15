@@ -10,13 +10,14 @@ type AppHeaderProps = {
   onSelect: (id: number) => void;
   onCreate: (name: string) => void;
   onDelete: () => void;
+  onShare: () => void;
   onLogout: () => void;
   children?: ReactNode;
 };
 
 const pill = "rounded-full border border-[var(--stroke)] bg-white px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)] hover:text-[var(--primary-blue)]";
 
-export const AppHeader = ({ user, boards, currentId, busy, onSelect, onCreate, onDelete, onLogout, children }: AppHeaderProps) => {
+export const AppHeader = ({ user, boards, currentId, busy, onSelect, onCreate, onDelete, onShare, onLogout, children }: AppHeaderProps) => {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const nameInput = useRef<HTMLInputElement>(null);
@@ -58,6 +59,9 @@ export const AppHeader = ({ user, boards, currentId, busy, onSelect, onCreate, o
           </form>
         ) : (
           <button type="button" disabled={busy} onClick={() => setCreating(true)} className={pill}>New board</button>
+        )}
+        {current?.role === "owner" && (
+          <button type="button" disabled={busy} onClick={onShare} className={pill}>Share</button>
         )}
         {current?.role === "owner" && (
           <button type="button" disabled={busy} onClick={onDelete} className={`${pill} hover:border-red-300 hover:text-red-700`}>Delete board</button>

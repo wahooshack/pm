@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { MembersPanel } from "@/components/MembersPanel";
 import { api, ApiError, type User } from "@/lib/api";
 import type { BoardData, BoardSummary } from "@/lib/kanban";
 
@@ -24,11 +25,15 @@ export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [sharing, setSharing] = useState(false);
+  // Remounting the board reloads it, so member changes reach the assignee list.
+  const [boardVersion, setBoardVersion] = useState(0);
   const expired = useRef(onSessionExpired);
   useEffect(() => { expired.current = onSessionExpired; }, [onSessionExpired]);
+  const sessionExpired = useCallback(() => expired.current("Your session expired. Sign in again."), []);
 
   const select = (id: number | null) => {
-    setCurrentId(id);
+    setCurrentId(id); setSharing(false);
     if (id) writeLastBoard(id);
   };
 
@@ -82,7 +87,12 @@ export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) 
   return (
     <div className="min-h-screen">
       <AppHeader user={user} boards={boards ?? []} currentId={currentId} busy={busy || !boards}
-        onSelect={select} onCreate={name => void createBoard(name)} onDelete={deleteBoard} onLogout={onLogout} />
+        onSelect={select} onCreate={name => void createBoard(name)} onDelete={deleteBoard} onShare={() => setSharing(true)} onLogout={onLogout} />
+      {sharing && currentId !== null && (
+        <MembersPanel boardId={currentId} boardName={boards?.find(board => board.id === currentId)?.name ?? ""}
+          onSessionExpired={sessionExpired}
+          onClose={changed => { setSharing(false); if (changed) setBoardVersion(version => version + 1); }} />
+      )}
       {error && (
         <div role="alert" className="mx-auto mt-4 max-w-[1800px] px-6">
           <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -96,7 +106,7 @@ export const Workspace = ({ user, onLogout, onSessionExpired }: WorkspaceProps) 
         <p className="mx-auto max-w-[1800px] px-6 py-12 text-[var(--gray-text)]">You have no boards yet. Create one with New board.</p>
       )}
       {currentId !== null && (
-        <KanbanBoard key={currentId} boardId={currentId} onBoardRenamed={renamed} onSessionExpired={onSessionExpired} />
+        <KanbanBoard key={`${currentId}-${boardVersion}`} boardId={currentId} onBoardRenamed={renamed} onSessionExpired={onSessionExpired} />
       )}
     </div>
   );

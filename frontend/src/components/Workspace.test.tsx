@@ -164,3 +164,36 @@ it("reports a failed board creation", async () => {
   await userEvent.type(screen.getByLabelText("New board name"), "Bad{Enter}");
   expect(await screen.findByText("Name rejected.")).toBeInTheDocument();
 });
+
+it("opens sharing for the owner and reloads the board after member changes", async () => {
+  let members: unknown[] = [];
+  const original = global.fetch;
+  global.fetch = vi.fn((input, init) => {
+    if (String(input) === "/api/boards/1/members" && init?.method === "POST") {
+      members = [{ username: "alice", displayName: "Alice", role: "editor" }];
+      return Promise.resolve(response(members));
+    }
+    if (String(input) === "/api/boards/1/members") return Promise.resolve(response(members));
+    return original(input, init);
+  }) as typeof fetch;
+  renderWorkspace();
+  await screen.findByLabelText("Board name");
+  await userEvent.click(screen.getByRole("button", { name: "Share" }));
+  const dialog = screen.getByRole("dialog", { name: "Share board" });
+  await userEvent.type(within(dialog).getByLabelText("Username to share with"), "alice");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Add member" }));
+  await within(dialog).findByText("@alice");
+  const loadsBefore = vi.mocked(global.fetch).mock.calls.filter(([path]) => path === "/api/boards/1").length;
+  await userEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() => expect(vi.mocked(global.fetch).mock.calls.filter(([path]) => path === "/api/boards/1").length).toBe(loadsBefore + 1));
+});
+
+it("does not offer sharing on boards the user does not own", async () => {
+  boards[1].role = "editor";
+  summaries = [{ id: 1, name: "Main Board", role: "editor", owner: "alice" }];
+  renderWorkspace();
+  await screen.findByLabelText("Board name");
+  expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Board name")).toBeEnabled();
+});
